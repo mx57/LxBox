@@ -33,6 +33,7 @@ void main() {
       concurrency: 4,
       timeout: const Duration(milliseconds: 500),
       maxGeoLookups: 0, // фазу 2 (ядро) в тесте не поднимаем
+      scanDns: false, // фаза 3 тоже внешняя сеть: здесь только loopback
       onStatus: statuses.add,
     );
 

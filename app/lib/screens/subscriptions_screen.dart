@@ -14,6 +14,7 @@ import '../services/subscription/auto_updater.dart';
 import '../services/url_launcher.dart';
 import 'add_server_wizard_screen.dart';
 import 'app_settings_screen.dart';
+import 'evolution_screen.dart';
 import 'folder_detail_screen.dart';
 import 'node_settings_screen.dart';
 import 'qr_scan_screen.dart';
@@ -563,6 +564,20 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
     ));
   }
 
+  /// §848 — эволюция конфигов: берёт ВСЕ узлы, которые есть на этом экране
+  /// (подписки, папки, ручные серверы), и отдаёт их на посев. Фильтр по
+  /// «прошли пинг и соединяются» здесь сознательно НЕ делается: у контроллера
+  /// нет актуального результата пинга, а молча выбросить половину конфигов
+  /// было бы хуже, чем показать их движку — тот сам отсеет непроходимые
+  /// пробой. Несобранные (не-WARP) узлы отсеивает сам посев и сообщает счёт.
+  void _openEvolution() {
+    final ctrl = widget.subController;
+    final nodes = [for (final e in ctrl.entries) ...e.list.nodes];
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => EvolutionScreen(subController: ctrl, nodes: nodes),
+    ));
+  }
+
   /// §500 — при отказе с известной причиной открыть шторку сразу после add.
   void _presentParseRejectSheetIfNeeded() {
     final err = widget.subController.lastError;
@@ -922,6 +937,9 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                     // overflow menu — explicit affordance).
                     if (v == 'wizard') _openAddServerWizard();
                     if (v == 'warp') _openWarpWizard();
+                    // §848 — эволюция берёт конфиги отсюда же, откуда и визард
+                    // их кладёт: три точки → «Evolve configs…».
+                    if (v == 'evolve') _openEvolution();
                     if (v == 'public') unawaited(_pickPublicTestServer());
                     if (v == 'paste') unawaited(_pasteFromClipboard());
                     if (v == 'qr') unawaited(_scanQrCode());
@@ -944,6 +962,11 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                     PopupMenuItem(value: 'folder', child: Text(getLocalText.s("New folder…"))),
                     const PopupMenuDivider(),
                     PopupMenuItem(value: 'warp', child: Text(getLocalText.s("Get WARP"))),
+                    // §848 — три точки экрана серверов = точка входа эволюции:
+                    // она берёт все конфиги, которые уже есть в списке.
+                    PopupMenuItem(
+                        value: 'evolve',
+                        child: Text(getLocalText.s("Evolve configs…"))),
                     if (CommunityServersLoader.enabled)
                       PopupMenuItem(value: 'public', child: Text(getLocalText.s("Get Public Test Servers"))),
                     const PopupMenuDivider(),

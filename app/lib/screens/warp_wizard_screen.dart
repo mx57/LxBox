@@ -274,21 +274,27 @@ class _WarpWizardScreenState extends State<WarpWizardScreen> with SnackHelper {
 
   // ───────────────────────── §284 — WARP GENERATOR ─────────────────────────
 
-  /// §834 — открывает сканер эндпоинтов. По возврату с выбранным `ScanPool`
+  /// §834 — открывает сканер эндпоинтов. По возврату с выбранным пулом
   /// сразу генерирует конфиги WARP/MASQUE на этих эндпоинтах (poolOverride),
   /// открывает папку «WARP GENERATOR» с результатом.
+  ///
+  /// §847 — вместе с эндпоинтами экран отдаёт выбор DNS-резолверов и SNI:
+  /// резолверы контроллер пишет в настройки DNS (откуда их берёт сборка), SNI
+  /// подменяют пул в [poolOverride], поэтому сеятель использует только
+  /// проверенные на этой сети домены.
   Future<void> _openEndpointScanner() async {
-    final pool = await Navigator.of(context).push<ScanPool>(
+    final sel = await Navigator.of(context).push<EndpointScanSelection>(
       MaterialPageRoute(builder: (_) => const EndpointScanScreen()),
     );
-    if (pool == null || !mounted) return;
+    if (sel == null || !mounted) return;
     // Генерируем конфиги на выбранных эндпоинтах.
     setState(() => _busy = true);
     int? folderIdx;
     try {
       folderIdx = await widget.subController.generateWarp(
         seedCount: _seedCount(),
-        poolOverride: pool,
+        poolOverride: sel.pool,
+        dnsSelected: sel.dns,
       );
     } catch (e) {
       if (mounted) {
@@ -566,7 +572,7 @@ class _WarpWizardScreenState extends State<WarpWizardScreen> with SnackHelper {
                 label: Text(getLocalText.s("Make experiment")),
               ),
               // §834 — сканер эндпоинтов по странам. Открывает
-              // EndpointScanScreen; возвращает выбранные `ip:port`.
+              // §847 — EndpointScanScreen; возвращает выбор: эндпоинты + DNS + SNI.
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: _busy ? null : _openEndpointScanner,

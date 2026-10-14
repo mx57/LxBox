@@ -9,6 +9,12 @@
 //     ошибки) с кнопками «Копировать» и «Поделиться» — отдать для диагноза.
 //   • Счётчики: проверено / живых / групп.
 //   • Список стран с чекбоксами (+ найдено/валидных), как раньше.
+//
+// §847 — экран стал четырёхшаговым конвейером выбора, как задумано:
+//   скан эндпоинтов → выбор СТРАН выходных точек → выбор отсканированных
+//   DNS-резолверов → выбор отсканированных SNI (белые списки РФ-провайдеров).
+//   Шаги 3 и 4 — такие же чекбоксы, как страны; результат отдаётся одним
+//   [EndpointScanSelection], и генератор получает пул + DNS + SNI за один раз.
 
 import 'dart:async';
 import 'dart:convert';
@@ -19,15 +25,35 @@ import 'package:flutter/services.dart'
 import 'package:share_plus/share_plus.dart';
 
 import '../services/l10n/locale_controller.dart';
+import '../services/usage_region.dart';
+import '../services/warp/scan/dns_scanner.dart' show DnsServerResult;
 import '../services/warp/scan/endpoint_scanner.dart';
 import '../services/warp/scan/scan_log.dart';
 import '../services/warp/scan/scan_models.dart';
 import '../services/warp/scan/scan_pool.dart';
+import '../services/warp/scan/sni_scanner.dart';
 import '../services/ui_helpers.dart';
 import '../widgets/app_bottom_sheet.dart';
 import '../widgets/safe_bottom.dart';
 
-/// Возвращает выбранные эндпоинты как [ScanPool] через [Navigator.pop] или
+/// §847 — выбор пользователя со всех шагов сканера.
+///
+/// [pool] — эндпоинты выбранных стран (уже с SNI-пулом из [sni], если выбран),
+/// [dns] — отобранные резолверы фазы 3: контроллер пишет их в хранилище DNS,
+/// откуда их забирает пост-шаг сборки. Пустой [dns]/[sni] = «ничего не меняем».
+class EndpointScanSelection {
+  const EndpointScanSelection({
+    required this.pool,
+    this.dns = const [],
+    this.sni = const [],
+  });
+
+  final ScanPool pool;
+  final List<DnsServerResult> dns;
+  final List<String> sni;
+}
+
+/// Возвращает выбор через [Navigator.pop] ([EndpointScanSelection]) или
 /// null (отмена).
 class EndpointScanScreen extends StatefulWidget {
   const EndpointScanScreen({
@@ -67,7 +93,26 @@ class _EndpointScanScreenState extends State<EndpointScanScreen>
   int _phase1Total = 0;
   int _phase2Done = 0;
   int _phase2Total = 0;
+  int _phase4Done = 0;
+  int _phase4Total = 0;
   Timer? _ticker;
+
+  /// §847 — выбор шага 3 (ключ — `DnsServerResult.endpoint`) и шага 4 (SNI).
+  /// Отдельные множества по той же причине, что и страны: строки DNS/SNI
+  /// приходят из разных фаз и пересечений с адресами не имеют.
+  final _selectedDns = <String>{};
+  final _selectedSni = <String>{};
+
+  /// §847 — кандидаты фазы 4: SNI-пулы пула с наложенной секцией
+  /// `loc.<регион>` (для РФ — белые списки CDN-реестра провайдеров).
+  /// Пусто → фаза 4 не запускается.
+  List<String> _sniCandidates = const [];
+
+  /// Сколько валидных резолверов отмечать по умолчанию (по RTT). Ничего не
+  /// отмечать нельзя осмысленно: пользователь жмёт «применить» и ждёт, что
+  /// выбранный DNS поедет в конфиг; два самых быстрых — разумный дефолт,
+  /// который легко снять.
+  static const _defaultDnsPicked = 2;
 
   /// §835 — живой список: адрес → вердикт. Обновляется из `onStatus` без
   /// setState (перерисовку даёт тикер 250 мс) — иначе 300 rebuild'ов за скан.
@@ -98,6 +143,10 @@ class _EndpointScanScreenState extends State<EndpointScanScreen>
       _phase1Total = 0;
       _phase2Done = 0;
       _phase2Total = 0;
+      _phase4Done = 0;
+      _phase4Total = 0;
+      _selectedDns.clear();
+      _selectedSni.clear();
       _note = '';
     });
     _ticker = Timer.periodic(const Duration(milliseconds: 250), (_) {
@@ -110,10 +159,25 @@ class _EndpointScanScreenState extends State<EndpointScanScreen>
       if (!mounted) return;
       _log.i('ui', 'пул загружен: ${endpoints.length} адресов');
       // §834 — базовый bundled-пул (SNI/порты) для построения пула из выбранных.
+      // §847 — кандидаты SNI берём из того же пула, но с наложенной секцией
+      // `loc.<регион>` (§425): в сети РФ это белые списки CDN-реестра
+      // провайдеров, вне её — корневой пул (секции нет → остаётся корень).
+      _sniCandidates = const [];
       try {
         final raw = await rootBundle.loadString('assets/warp_endpoints.json');
+        final region = await UsageRegion.effective();
         _basePool = ScanPool.fromFullJson(
           jsonDecode(raw) as Map<String, dynamic>,
+          region: region,
+        );
+        _sniCandidates = sniScanCandidates(
+          masque: _basePool?.masqueSniPool ?? const <String>[],
+          wg: _basePool?.wgSniPool ?? const <String>[],
+        );
+        _log.i(
+          'ui',
+          'регион пула: ${region.isEmpty ? 'нет' : region}, '
+          'SNI-кандидатов: ${_sniCandidates.length}',
         );
       } catch (e) {
         _basePool = null;
@@ -125,6 +189,7 @@ class _EndpointScanScreenState extends State<EndpointScanScreen>
         timeout: widget.timeout,
         excludeColos: widget.excludeColos,
         log: _log,
+        sniCandidates: _sniCandidates,
         onStatus: (s) => _statuses[s.endpoint] = s,
         onProgressPhase1: (d, t) {
           _phase1Done = d;
@@ -133,6 +198,10 @@ class _EndpointScanScreenState extends State<EndpointScanScreen>
         onProgressPhase2: (d, t) {
           _phase2Done = d;
           _phase2Total = t;
+        },
+        onProgressPhase4: (d, t) {
+          _phase4Done = d;
+          _phase4Total = t;
         },
         onNote: (n) => _note = n,
       );
@@ -146,6 +215,7 @@ class _EndpointScanScreenState extends State<EndpointScanScreen>
         for (final s in result.statuses) {
           _statuses[s.endpoint] = s;
         }
+        _preselect(result);
       });
     } catch (e) {
       _log.e('ui', 'скан упал: $e');
@@ -175,6 +245,44 @@ class _EndpointScanScreenState extends State<EndpointScanScreen>
         .fold(0, (s, g) => s + g.valid);
   }
 
+  /// §847 — отобранные резолверы (в порядке фазы 3, не в порядке тапов).
+  List<DnsServerResult> get _selectedDnsList {
+    final r = _result;
+    if (r == null) return const [];
+    return [
+      for (final d in _sortedValidDns(r))
+        if (_selectedDns.contains(d.endpoint)) d,
+    ];
+  }
+
+  /// §847 — отобранные SNI в порядке кандидатов.
+  List<String> get _selectedSniList {
+    final r = _result;
+    if (r == null) return const [];
+    return [
+      for (final s in r.sni)
+        if (_selectedSni.contains(s.sni)) s.sni,
+    ];
+  }
+
+  /// Валидные резолверы по RTT (неизмеренный — в конец).
+  List<DnsServerResult> _sortedValidDns(EndpointScanResult r) =>
+      r.validDns..sort((a, b) {
+        final x = a.rttMs == 0 ? 1 << 30 : a.rttMs;
+        final y = b.rttMs == 0 ? 1 << 30 : b.rttMs;
+        return x.compareTo(y);
+      });
+
+  /// §847 — отметки по умолчанию после скана: два самых быстрых валидных
+  /// резолвера и ВСЕ прошедшие SNI. SNI иначе пришлось бы отмечать вручную по
+  /// каждому из 16 доменов, а смысл шага именно в «что пропустили сегодня».
+  void _preselect(EndpointScanResult r) {
+    _selectedDns.addAll(
+      _sortedValidDns(r).take(_defaultDnsPicked).map((d) => d.endpoint),
+    );
+    _selectedSni.addAll(r.validSni.map((s) => s.sni));
+  }
+
   void _useSelected() {
     final r = _result;
     if (r == null) return;
@@ -185,10 +293,20 @@ class _EndpointScanScreenState extends State<EndpointScanScreen>
               ? g.endpoints
               : g.endpoints.take(widget.perCountryLimit)) e.endpoint,
     ];
-    // §834 — возвращаем ScanPool (а не строки): генератор сразу сгенерирует
-    // конфиги WARP/MASQUE на выбранных эндпоинтах через poolOverride.
-    final pool = ScanPool.fromEndpoints(eps, base: _basePool);
-    Navigator.of(context).pop(pool);
+    final sni = _selectedSniList;
+    // §834 — возвращаем пул (а не строки): генератор сразу соберёт конфиги
+    // WARP/MASQUE на выбранных эндпоинтах через poolOverride.
+    // §847 — [sniOverride] меняет SNI-пулы пула, поэтому Монте-Карло сеет
+    // узлы только на проверенных доменах; DNS уходят в хранилище настроек.
+    final pool = ScanPool.fromEndpoints(
+      eps,
+      base: _basePool,
+      sniOverride: sni,
+    );
+    if (pool == null) return;
+    Navigator.of(context).pop(
+      EndpointScanSelection(pool: pool, dns: _selectedDnsList, sni: sni),
+    );
   }
 
   // ───────────────────────── §835 — лог ─────────────────────────
@@ -352,8 +470,10 @@ class _EndpointScanScreenState extends State<EndpointScanScreen>
                         : _useSelected,
                     child: Text(
                       getLocalText.s(
-                        "Use selected (%1\$s endpoints)",
+                        "Apply selection: %1\$s endpoints · %2\$s DNS · %3\$s SNI",
                         '$_selectedEndpointCount',
+                        '${_selectedDns.length}',
+                        '${_selectedSni.length}',
                       ),
                     ),
                   ),
@@ -367,7 +487,10 @@ class _EndpointScanScreenState extends State<EndpointScanScreen>
   }
 
   Widget _buildProgress(ColorScheme cs) {
-    final alive = _statuses.values.where((s) => s.alive).length;
+    final endpoints = _statuses.values.where((s) => s.phase < 3);
+    final alive = endpoints.where((s) => s.alive).length;
+    final dnsPhase = _statuses.values.any((s) => s.phase == 3);
+    final sniPhase = _statuses.values.any((s) => s.phase == 4);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       child: Column(
@@ -378,15 +501,24 @@ class _EndpointScanScreenState extends State<EndpointScanScreen>
               LinearProgressIndicator(value: _phase1Done / _phase1Total),
             const SizedBox(height: 4),
             Text(
-              _phase2Total > 0
+              sniPhase
                   ? getLocalText.s(
-                      "Phase 2: determining country of %1\$s endpoints…",
-                      '$_phase2Done/$_phase2Total',
+                      "Phase 4: checking %1\$s SNI domains through live endpoints…",
+                      '$_phase4Done/$_phase4Total',
                     )
-                  : getLocalText.s(
-                      "Phase 1: probing %1\$s endpoints…",
-                      '$_phase1Done/$_phase1Total',
-                    ),
+                  : dnsPhase
+                      ? getLocalText.s(
+                          "Phase 3: checking known DNS resolvers…",
+                        )
+                      : _phase2Total > 0
+                          ? getLocalText.s(
+                              "Phase 2: determining country of %1\$s endpoints…",
+                              '$_phase2Done/$_phase2Total',
+                            )
+                          : getLocalText.s(
+                              "Phase 1: probing %1\$s endpoints…",
+                              '$_phase1Done/$_phase1Total',
+                            ),
               style: Theme.of(context).textTheme.bodySmall,
             ),
             if (_viaTcp)
@@ -404,7 +536,7 @@ class _EndpointScanScreenState extends State<EndpointScanScreen>
           Text(
             getLocalText.s(
               "Probed %1\$s · alive %2\$s",
-              '${_statuses.length}',
+              '${endpoints.length}',
               '$alive',
             ),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -420,8 +552,9 @@ class _EndpointScanScreenState extends State<EndpointScanScreen>
   Widget _buildBody(ColorScheme cs) {
     final r = _result;
     // Живой список адресов (по мере проверки) — основное, что хочет видеть
-    // пользователь: что скан РАБОТАЕТ и что отвечает.
-    final statuses = _statuses.values.toList()
+    // пользователь: что скан РАБОТАЕТ и что отвечает. Фаза 3 (DNS) показана
+    // отдельным блоком ниже, поэтому здесь только P1/P2.
+    final statuses = _statuses.values.where((s) => s.phase < 3).toList()
       ..sort((a, b) {
         // Живые выше мёртвых; внутри — по RTT.
         if (a.alive != b.alive) return a.alive ? -1 : 1;
@@ -430,6 +563,8 @@ class _EndpointScanScreenState extends State<EndpointScanScreen>
       });
 
     final hasGroups = r != null && r.groups.isNotEmpty;
+    final dns = r == null ? const <DnsServerResult>[] : _sortedValidDns(r);
+    final sni = r?.sni ?? const <SniScanResult>[];
 
     return ListView(
       padding: const EdgeInsets.all(8).withSafeBottom(context),
@@ -469,7 +604,133 @@ class _EndpointScanScreenState extends State<EndpointScanScreen>
             child: Center(child: CircularProgressIndicator()),
           ),
         for (final s in statuses) _statusTile(s, cs),
+        if (r != null && r.dns.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+            child: Text(
+              getLocalText.s('Valid DNS resolvers'),
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+          ),
+          if (dns.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              child: Text(
+                getLocalText.s(
+                  "No known DNS resolver answered our query correctly — DNS is intercepted or blocked.",
+                ),
+                style: TextStyle(color: cs.error, fontSize: 12),
+              ),
+            ),
+          if (dns.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+              child: Text(
+                getLocalText.s(
+                  "Picked resolvers go into DNS settings and the generated configs.",
+                ),
+                style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+              ),
+            ),
+          for (final d in dns) _dnsTile(d, cs),
+        ],
+        // §847 — шаг 4: SNI, прогнанные через живые эндпоинты. Непрошедшие
+        // видны, но не выбираются: выбрать зарезанный домен — значит собрать
+        // конфиг, который не поднимется.
+        if (r != null && sni.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+            child: Text(
+              getLocalText.s('SNI domains (provider allow-list)'),
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+            child: Text(
+              getLocalText.s(
+                "Only domains that answered through a live endpoint can be picked.",
+              ),
+              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+            ),
+          ),
+          for (final s in sni) _sniTile(s, cs),
+        ],
       ],
+    );
+  }
+
+  /// §845/§847 — строка валидного резолвера из фазы 3: адрес, провайдер, RTT,
+  /// UDP/TCP 853 (DoT) и самоидентификация `id.server`; чекбокс — шаг выбора.
+  Widget _dnsTile(DnsServerResult d, ColorScheme cs) {
+    final subtitle = StringBuffer('${d.rttMs}ms');
+    if (d.dotOpen) subtitle.write(' · TCP 853');
+    if (d.identity.isNotEmpty) subtitle.write(' · ${d.identity}');
+    return CheckboxListTile(
+      value: _selectedDns.contains(d.endpoint),
+      onChanged: (v) => setState(() {
+        if (v == true) {
+          _selectedDns.add(d.endpoint);
+        } else {
+          _selectedDns.remove(d.endpoint);
+        }
+      }),
+      dense: true,
+      visualDensity: VisualDensity.compact,
+      controlAffinity: ListTileControlAffinity.leading,
+      title: Text(
+        d.endpoint,
+        style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+      ),
+      subtitle: Text(
+        '${d.label} · $subtitle',
+        style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+      ),
+    );
+  }
+
+  /// §847 — строка SNI-кандидата из фазы 4: домен, вердикт, на каком эндпоинте
+  /// прогоняли и сколько эндпоинтов успели проверить.
+  Widget _sniTile(SniScanResult s, ColorScheme cs) {
+    final subtitle = StringBuffer(
+      s.valid
+          ? getLocalText.s("answered via %1\$s", s.endpoint)
+          : getLocalText.s("blocked on this network"),
+    );
+    if (s.tried > 1) {
+      subtitle.write(
+        ' · ${getLocalText.s("%1\$s endpoints tried", '${s.tried}')}',
+      );
+    }
+    return CheckboxListTile(
+      value: _selectedSni.contains(s.sni),
+      onChanged: s.valid
+          ? (v) => setState(() {
+              if (v == true) {
+                _selectedSni.add(s.sni);
+              } else {
+                _selectedSni.remove(s.sni);
+              }
+            })
+          : null,
+      dense: true,
+      visualDensity: VisualDensity.compact,
+      controlAffinity: ListTileControlAffinity.leading,
+      secondary: Icon(
+        s.valid ? Icons.shield_outlined : Icons.block_outlined,
+        color: s.valid ? cs.primary : cs.onSurfaceVariant,
+        size: 20,
+      ),
+      title: Text(
+        s.sni,
+        style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+      ),
+      subtitle: Text(
+        subtitle.toString(),
+        style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+      ),
     );
   }
 
