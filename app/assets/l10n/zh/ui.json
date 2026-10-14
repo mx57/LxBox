@@ -5592,14 +5592,44 @@
   "Rescan": {
     "value": "重新扫描"
   },
-  "Use selected (%1$s endpoints)": {
-    "value": "使用所选（端点 %1$s）"
+  "Apply selection: %1$s endpoints · %2$s DNS · %3$s SNI": {
+    "value": "应用选择：端点 %1$s · DNS %2$s · SNI %3$s"
   },
   "Phase 1: probing %1$s endpoints…": {
     "value": "阶段 1：探测端点 %1$s…"
   },
   "Phase 2: determining country of %1$s endpoints…": {
     "value": "阶段 2：确定端点 %1$s 的国家…"
+  },
+  "Phase 3: checking known DNS resolvers…": {
+    "value": "阶段 3：检查已知 DNS 解析器…"
+  },
+  "Phase 4: checking %1$s SNI domains through live endpoints…": {
+    "value": "阶段 4：通过可用端点检查 SNI 域名 %1$s…"
+  },
+  "Valid DNS resolvers": {
+    "value": "有效的 DNS 解析器"
+  },
+  "Picked resolvers go into DNS settings and the generated configs.": {
+    "value": "所选解析器会写入 DNS 设置并用于生成的配置。"
+  },
+  "SNI domains (provider allow-list)": {
+    "value": "SNI 域名（服务商白名单）"
+  },
+  "Only domains that answered through a live endpoint can be picked.": {
+    "value": "只能选择通过可用端点作出响应的域名。"
+  },
+  "answered via %1$s": {
+    "value": "已通过 %1$s 响应"
+  },
+  "blocked on this network": {
+    "value": "在此网络被拦截"
+  },
+  "%1$s endpoints tried": {
+    "value": "已尝试 %1$s 个端点"
+  },
+  "No known DNS resolver answered our query correctly — DNS is intercepted or blocked.": {
+    "value": "没有已知 DNS 解析器正确响应我们的查询 —— DNS 被劫持或已被屏蔽。"
   },
   "%1$s found · %2$s valid": {
     "value": "找到 %1$s · 有效 %2$s"
@@ -5633,5 +5663,260 @@
   },
   "All probed endpoints": {
     "value": "所有已探测地址"
+  },
+  "%1$s configs could not be rebuilt and were skipped": {
+    "value": "%1$s 个配置无法重建，已跳过"
+  },
+  "%1$s probes · %2$s passed · deepest round %3$s": {
+    "value": "%1$s 次探测 · %2$s 次通过 · 最深轮次 %3$s"
+  },
+  "0 restarts randomly each run; a fixed number repeats the campaign": {
+    "value": "0 表示每次随机；固定数字可复现同一轮演化"
+  },
+  "A response through the node is not a load test — this optimises handshake passability": {
+    "value": "节点有响应不等于负载测试——这里优化的是握手通过率"
+  },
+  "All countries": {
+    "value": "所有国家"
+  },
+  "Any country": {
+    "value": "任意国家"
+  },
+  "Best pass rate": {
+    "value": "最佳通过率"
+  },
+  "Candidate": {
+    "value": "候选配置"
+  },
+  "Candidates evaluated per generation — each one costs live probes": {
+    "value": "每代评估的候选数量——每个候选都要消耗实际探测"
+  },
+  "Candidates": {
+    "value": "候选配置"
+  },
+  "Config body": {
+    "value": "配置正文"
+  },
+  "Config evolution": {
+    "value": "配置演化"
+  },
+  "Confirmations needed": {
+    "value": "需要确认次数"
+  },
+  "Confirmed": {
+    "value": "已确认"
+  },
+  "Copy config": {
+    "value": "复制配置"
+  },
+  "Countries come from live probes, so the filter only narrows endpoints that are already classified": {
+    "value": "国家来自实际探测，因此筛选只会缩小已识别国家的地址范围"
+  },
+  "Countries learned": {
+    "value": "已识别国家"
+  },
+  "Country": {
+    "value": "国家"
+  },
+  "DPI verdicts drift, so the hall of fame only lists configs confirmed in separate generations": {
+    "value": "DPI 判定会漂移，因此名人堂只收录在不同世代中重复验证通过的配置"
+  },
+  "Diversity": {
+    "value": "多样性"
+  },
+  "EDA (UMDA)": {
+    "value": "EDA (UMDA)"
+  },
+  "EDA learns which values the winners share; GA recombines two parents": {
+    "value": "EDA 学习优胜者共有的取值；GA 对双亲进行重组"
+  },
+  "Elite fraction": {
+    "value": "精英比例"
+  },
+  "Empty until a config repeats its passability in %s separate generations": {
+    "value": "在配置于 %s 个不同世代复现通过率之前为空"
+  },
+  "Endpoint countries": {
+    "value": "端点国家"
+  },
+  "Endpoints available": {
+    "value": "可用端点数"
+  },
+  "Estimated %1$s requests for the full run — budget %2$s will cut it short": {
+    "value": "预计完整运行需 %1$s 次请求——%2$s 的预算会提前中断"
+  },
+  "Estimated %1$s requests for the full run": {
+    "value": "预计完整运行需 %1$s 次请求"
+  },
+  "Evolution log": {
+    "value": "演化日志"
+  },
+  "Evolve configs…": {
+    "value": "演化配置…"
+  },
+  "First probes are still running": {
+    "value": "首批探测仍在进行"
+  },
+  "Frozen genes": {
+    "value": "冻结基因"
+  },
+  "Generation": {
+    "value": "世代"
+  },
+  "Generations": {
+    "value": "世代数"
+  },
+  "Genes": {
+    "value": "基因"
+  },
+  "Genetic algorithm": {
+    "value": "遗传算法"
+  },
+  "Hall of fame size": {
+    "value": "名人堂容量"
+  },
+  "Hall of fame": {
+    "value": "名人堂"
+  },
+  "Hard stop: every verdict costs up to 3 HTTP probes — the geo check rotates sources": {
+    "value": "硬性停止：一个判定最多消耗 3 次 HTTP 探测 — 地理检查会轮换来源"
+  },
+  "How many top configs feed the frequency model": {
+    "value": "有多少顶部配置参与频率模型学习"
+  },
+  "Immigrant fraction": {
+    "value": "移民比例"
+  },
+  "Keep fraction per round": {
+    "value": "每轮保留比例"
+  },
+  "Last failures": {
+    "value": "最近失败原因"
+  },
+  "Lifetime over this campaign": {
+    "value": "本轮活动中的存活时长"
+  },
+  "Mutation rate": {
+    "value": "变异率"
+  },
+  "Mutation space": {
+    "value": "变异空间"
+  },
+  "Nothing passed — probe failures": {
+    "value": "没有通过的配置 — 探测失败原因"
+  },
+  "One and the same reason for every candidate is a probe-path problem, not a block — check the DNS server and the target country, then rerun": {
+    "value": "所有候选项的失败原因完全相同，说明是探测路径问题而不是封锁 — 请检查 DNS 服务器与目标国家后重新运行"
+  },
+  "Nothing to choose from yet": {
+    "value": "暂无可选项"
+  },
+  "Nothing to save — these configs could not be rebuilt": {
+    "value": "没有可保存的内容——这些配置无法重建"
+  },
+  "Pass rate and diversity by generation": {
+    "value": "各世代的通过率与多样性"
+  },
+  "Pass rate": {
+    "value": "通过率"
+  },
+  "Pass threshold": {
+    "value": "通过阈值"
+  },
+  "Passable now": {
+    "value": "当前可通"
+  },
+  "Population": {
+    "value": "种群规模"
+  },
+  "Probe rounds (successive halving)": {
+    "value": "探测轮次（逐轮减半）"
+  },
+  "Probes": {
+    "value": "探测"
+  },
+  "Probing": {
+    "value": "探测中"
+  },
+  "RTT": {
+    "value": "RTT"
+  },
+  "Random newcomers keep the search from collapsing on one answer": {
+    "value": "随机新个体可防止搜索收敛到单一答案"
+  },
+  "Random seed": {
+    "value": "随机种子"
+  },
+  "Rank": {
+    "value": "排名"
+  },
+  "Record fragmentation": {
+    "value": "记录分片"
+  },
+  "Reproducibility": {
+    "value": "可复现性"
+  },
+  "Request budget": {
+    "value": "请求预算"
+  },
+  "Request timeout": {
+    "value": "请求超时"
+  },
+  "Requests used": {
+    "value": "已用请求"
+  },
+  "Requests": {
+    "value": "请求"
+  },
+  "Reset defaults": {
+    "value": "恢复默认"
+  },
+  "Save %s": {
+    "value": "保存 %s"
+  },
+  "Saved %1$s configs to folder %2$s": {
+    "value": "已将 %1$s 个配置保存到文件夹 %2$s"
+  },
+  "Search operator": {
+    "value": "搜索算子"
+  },
+  "Search": {
+    "value": "搜索"
+  },
+  "Seed from your servers: %1$s of %2$s configs": {
+    "value": "从你的服务器播种：%2$s 个配置中取 %1$s 个"
+  },
+  "Seeds": {
+    "value": "初始种子"
+  },
+  "Separate generations a config must repeat to reach the hall of fame": {
+    "value": "配置需在多少个不同世代复现结果才能进入名人堂"
+  },
+  "Start a run to see candidates here": {
+    "value": "开始运行后此处会显示候选配置"
+  },
+  "Start evolution": {
+    "value": "开始演化"
+  },
+  "TLS fragmentation": {
+    "value": "TLS 分片"
+  },
+  "Target exit country": {
+    "value": "目标出口国家"
+  },
+  "The endpoint pool is empty — run the endpoint scanner first": {
+    "value": "端点池为空——请先运行端点扫描器"
+  },
+  "There are no usable configs to evolve — generate or import WARP nodes first": {
+    "value": "没有可用于演化的配置——请先生成或导入 WARP 节点"
+  },
+  "Transports": {
+    "value": "传输协议"
+  },
+  "confirmations": {
+    "value": "次确认"
+  },
+  "probes": {
+    "value": "次探测"
   }
 }

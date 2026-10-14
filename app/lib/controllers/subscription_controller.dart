@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/auto_select.dart';
 import '../models/core_reject_verdict.dart';
+import '../models/dns_ref.dart';
 import '../models/import_rule.dart';
 import '../models/node_link.dart';
 import '../models/node_spec.dart';
@@ -60,6 +61,7 @@ import '../services/warp/warp_account.dart';
 import '../services/warp/warp_client.dart';
 import '../services/warp/warp_endpoint_picker.dart';
 import '../services/warp/scan/candidate_generator.dart';
+import '../services/warp/scan/dns_scanner.dart';
 import '../services/warp/scan/scan_models.dart';
 import '../services/warp/scan/scan_node_builder.dart';
 import '../services/warp/scan/scan_pool.dart';
@@ -1642,6 +1644,40 @@ class SubscriptionController extends ChangeNotifier {
   /// §284 — имя папки-генератора WARP-узлов. Повторный GENERATE её пересоздаёт.
   static const kScanFolderName = 'WARP GENERATOR';
 
+  /// §848 — папка победителей эволюции. Создаётся ТОЛЬКО по кнопке экрана:
+  /// прогон сам по себе ничего в хранилище не пишет.
+  static const kEvolutionFolderName = 'WARP EVOLUTION';
+
+  /// §848 — положить отобранные после эволюции тела sing-box (по одному на
+  /// элемент) в папку; папка с таким именем пересоздаётся. Это именно ТЕЛА, а
+  /// не URI: мутации генома в ссылку не помещаются (`tls.fragment`, смешанный
+  /// регистр SNI, `mtu`, `keep_alive_period`) — см. `exportFor` в
+  /// `services/evolution/probe_evaluator.dart`. Возвращает индекс папки.
+  Future<int> addEvolutionFolder(List<String> bodies,
+      {String name = kEvolutionFolderName}) async {
+    for (var i = _entries.length - 1; i >= 0; i--) {
+      final l = _entries[i].list;
+      if (l is FolderServers && l.name == name) _entries.removeAt(i);
+    }
+    _entries.add(SubscriptionEntry(
+      list: FolderServers(
+        id: newUuidV4(),
+        name: name,
+        enabled: true,
+        tagPrefix: '',
+        detourPolicy: DetourPolicy.defaults,
+        members: [for (final b in bodies) FolderMember(raw: b)],
+        pingUrl: kScanProbeUrl,
+        pingTimeoutMs: 3000,
+      ),
+      nodeCount: bodies.length,
+    ));
+    await _persist();
+    notifyListeners();
+    AppLog.I.info('Evolution folder: $name (${bodies.length} nodes)');
+    return _entries.length - 1;
+  }
+
   /// §284 — заметка о последней генерации (напр. почему пропал MASQUE).
   /// Показывается снеком в визарде. null = без замечаний.
   String? lastScanNote;
@@ -1659,8 +1695,12 @@ class SubscriptionController extends ChangeNotifier {
     WarpClient? client,
     // §305 — override пула из JSON-окна эксперимента. null → bundled asset.
     ScanPool? poolOverride,
+    // §847 — DNS-резолверы, выбранные после скана (фаза 3). Пусто → ничего не
+    // трогаем в настройках DNS.
+    List<DnsServerResult> dnsSelected = const [],
   }) async {
     lastScanNote = null;
+    await applyScannedDns(dnsSelected);
     final pool = poolOverride ?? (await WarpEndpointPicker.load()).scan;
     if (pool == null) return null;
 
@@ -1696,6 +1736,38 @@ class SubscriptionController extends ChangeNotifier {
     final seedUris = _candidatesToUris(gen.seed(seedCount), builder);
     if (seedUris.isEmpty) return null;
     return _recreateScanFolder(seedUris);
+  }
+
+  /// §847 — выбранные после скана DNS-резолверы → записи хранения DNS, откуда
+  /// их забирает пост-шаг сборки `dns_servers.dart`. То же самое пользователь
+  /// делает руками в DNS-настройках, поэтому генератору не нужна отдельная
+  /// ветка: конфиг собирается из хранения, как всегда.
+  ///
+  /// Запись по тегу обновляется или добавляется, порядок существующих сохраняется;
+  /// ничего не удаляем — выбор из скана дополняет список, а не чистит его.
+  Future<void> applyScannedDns(List<DnsServerResult> picked) async {
+    final records = scannedDnsRecords(picked);
+    if (records.isEmpty) return;
+    try {
+      final stored = await SettingsStorage.getDnsServers();
+      final merged = <DnsServerRef>[...stored];
+      for (final r in records) {
+        final i = merged.indexWhere((s) => s.tag == r.tag);
+        if (i >= 0) {
+          merged[i] = r;
+        } else {
+          merged.add(r);
+        }
+      }
+      await SettingsStorage.saveDnsServers(merged);
+      AppLog.I.info(
+        'generateWarp: применено DNS из скана: '
+        '${records.map((r) => r.tag).join(', ')}',
+      );
+    } catch (e) {
+      AppLog.I.warning('applyScannedDns: $e');
+      lastScanNote = 'DNS settings were not saved — $e';
+    }
   }
 
   Future<WarpAccount?> _tryRegisterWarp(WarpClient warp, String now) async {

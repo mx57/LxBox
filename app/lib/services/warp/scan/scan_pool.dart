@@ -173,18 +173,44 @@ class ScanPool {
   }
 
   /// §834 — пул из отсканированных эндпоинтов (выбранных стран).
-  /// Каждый эндпоинт становится /32-записью в wgV4Cidr (для WG) и h2-блоке
-  /// (для MASQUE h2). Общие SNI/порты берутся из [base] (обычно bundled asset).
+  /// Каждый эндпоинт (`ip:port`, v6 — `[ip]:port`) нормализуется к хосту без
+  /// порта ([endpointHost]) и становится /32 (v4) или /128 (v6)-записью в
+  /// wgV4Cidr (для WG) и h2-блоке (для MASQUE h2); дубли одного IP на разных
+  /// портах схлопываются в одну запись. MASQUE-хосты (preset/h3) идут ЧИСТЫМИ
+  /// IP: [randomMasqueIp] отдаёт их дословно в `ScanCandidate.ip`, а
+  /// `MasqueAccount.toMasqueUri` сам клеит `@$server:$port` — порт внутри IP
+  /// давал бы битый `masque://…@ip:port:port`. В [wgEndpointsPreset] порт
+  /// сохраняем: это пункты combobox'а, а не источник рандома.
+  /// Общие SNI/порты берутся из [base] (обычно bundled asset).
   /// Если [base] нет — дефолты. Возвращает null, если нет ни одного эндпоинта.
-  static ScanPool? fromEndpoints(List<String> endpoints, {ScanPool? base}) {
+  ///
+  /// [sniOverride] (§847) — SNI, которые пользователь выбрал после прогона
+  /// (фаза 4). Они подменяют пулы WG и MASQUE ЦЕЛИКОМ: с bundled-пулом
+  /// генератор размазал бы узлы по всем доменам, включая те, что DPI сегодня
+  /// режет, и выбор пользователя просто потерялся бы.
+  static ScanPool? fromEndpoints(
+    List<String> endpoints, {
+    ScanPool? base,
+    List<String> sniOverride = const [],
+  }) {
     if (endpoints.isEmpty) return null;
+    final hosts = <String>[];
     final seen = <String>{};
-    final cidrs = <String>[
-      for (final e in endpoints)
-        if (seen.add(e.trim()) && e.trim().isNotEmpty)
-          '${e.trim().split(':').first}/32',
+    for (final e in endpoints) {
+      final h = endpointHost(e.trim());
+      if (h.isEmpty || !seen.add(h)) continue;
+      hosts.add(h);
+    }
+    if (hosts.isEmpty) return null;
+    final cidrs = [
+      for (final h in hosts) '$h/${h.contains(':') ? 128 : 32}',
     ];
-    if (cidrs.isEmpty) return null;
+    final sni = <String>{};
+    for (final s in sniOverride) {
+      final t = s.trim().toLowerCase();
+      if (t.isNotEmpty) sni.add(t);
+    }
+    final sniList = sni.isEmpty ? null : sni.toList();
     return ScanPool(
       wgV4Cidr: cidrs,
       wgV6Cidr: base?.wgV6Cidr ?? const [],
@@ -192,22 +218,38 @@ class ScanPool {
       wgRecommendedEndpoint: base?.wgRecommendedEndpoint ?? '',
       wgPorts: base?.wgPorts ?? const [2408, 500, 1701, 4500],
       wgPortsExtra: base?.wgPortsExtra ?? const [],
-      wgSniPool: base?.wgSniPool ?? const ['www.google.com'],
+      wgSniPool:
+          sniList ?? base?.wgSniPool ?? const ['www.google.com'],
       utlsFpPool:
           base?.utlsFpPool ?? const ['chrome', 'firefox', 'safari', 'edge'],
       wgKeepalive: base?.wgKeepalive ?? 0,
-      masqueHostsPreset: endpoints,
+      masqueHostsPreset: hosts,
       masqueRecommendedHost: base?.masqueRecommendedHost ?? '',
       masqueV4Cidr: cidrs,
-      masqueH3HostsExtra: endpoints.isNotEmpty ? endpoints : (base?.masqueH3HostsExtra ?? const []),
+      masqueH3HostsExtra: hosts,
       masqueH2Exclude: base?.masqueH2Exclude ?? const [],
       masquePortsH3: base?.masquePortsH3 ?? const [443, 4443, 8095],
       masquePortsH2: base?.masquePortsH2 ?? const [500, 4500, 8443],
       masqueSniPool:
-          base?.masqueSniPool ?? const ['consumer-masque.cloudflareclient.com'],
-      masqueRecommendedSni: base?.masqueRecommendedSni ?? '',
+          sniList ??
+          base?.masqueSniPool ??
+          const ['consumer-masque.cloudflareclient.com'],
+      masqueRecommendedSni:
+          sniList != null ? '' : base?.masqueRecommendedSni ?? '',
       apiHosts: base?.apiHosts ?? const [],
     );
+  }
+
+  /// Хост из эндпоинта без порта: `ip:port` → `ip`, `[v6]:port` → `v6`
+  /// (скобки снимаем — рандом и по блоку, и по preset идёт чистыми адресами).
+  /// Строка без порта возвращается как есть; битая `[v6` без `]` — тоже.
+  static String endpointHost(String endpoint) {
+    if (endpoint.startsWith('[')) {
+      final close = endpoint.indexOf(']');
+      return close < 0 ? endpoint : endpoint.substring(1, close);
+    }
+    final i = endpoint.indexOf(':');
+    return i < 0 ? endpoint : endpoint.substring(0, i);
   }
 
   /// §305 — порты для транспорта: `h2` → h2-набор, иначе h3-набор.

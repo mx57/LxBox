@@ -5871,14 +5871,44 @@
   "Rescan": {
     "value": "Пересканировать"
   },
-  "Use selected (%1$s endpoints)": {
-    "value": "Использовать выбранные (эндпоинтов: %1$s)"
+  "Apply selection: %1$s endpoints · %2$s DNS · %3$s SNI": {
+    "value": "Применить выбор: эндпоинтов %1$s · DNS %2$s · SNI %3$s"
   },
   "Phase 1: probing %1$s endpoints…": {
     "value": "Фаза 1: проверка эндпоинтов %1$s…"
   },
   "Phase 2: determining country of %1$s endpoints…": {
     "value": "Фаза 2: определение страны эндпоинтов %1$s…"
+  },
+  "Phase 3: checking known DNS resolvers…": {
+    "value": "Фаза 3: проверка известных DNS-резолверов…"
+  },
+  "Phase 4: checking %1$s SNI domains through live endpoints…": {
+    "value": "Фаза 4: проверка SNI-доменов %1$s через живые эндпоинты…"
+  },
+  "Valid DNS resolvers": {
+    "value": "Валидные DNS-резолверы"
+  },
+  "Picked resolvers go into DNS settings and the generated configs.": {
+    "value": "Выбранные резолверы попадут в настройки DNS и в собираемые конфиги."
+  },
+  "SNI domains (provider allow-list)": {
+    "value": "SNI-домены (белый список провайдера)"
+  },
+  "Only domains that answered through a live endpoint can be picked.": {
+    "value": "Можно выбрать только домены, ответившие через живой эндпоинт."
+  },
+  "answered via %1$s": {
+    "value": "ответил через %1$s"
+  },
+  "blocked on this network": {
+    "value": "не прошёл на этой сети"
+  },
+  "%1$s endpoints tried": {
+    "value": "проверено эндпоинтов: %1$s"
+  },
+  "No known DNS resolver answered our query correctly — DNS is intercepted or blocked.": {
+    "value": "Ни один известный DNS-резолвер не ответил на наш запрос корректно — DNS перехватывается или заблокирован."
   },
   "%1$s found · %2$s valid": {
     "value": "найдено: %1$s · валидных: %2$s"
@@ -5912,5 +5942,260 @@
   },
   "All probed endpoints": {
     "value": "Все проверенные адреса"
+  },
+  "%1$s configs could not be rebuilt and were skipped": {
+    "value": "Пропущено конфигов, которые не удалось пересобрать: %1$s"
+  },
+  "%1$s probes · %2$s passed · deepest round %3$s": {
+    "value": "Проб: %1$s · успешных: %2$s · самый глубокий раунд: %3$s"
+  },
+  "0 restarts randomly each run; a fixed number repeats the campaign": {
+    "value": "0 — каждый запуск со случайным зерном; фиксированное число повторяет кампанию"
+  },
+  "A response through the node is not a load test — this optimises handshake passability": {
+    "value": "Ответ через узел — не замер скорости: здесь оптимизируется проходимость рукопожатия"
+  },
+  "All countries": {
+    "value": "Все страны"
+  },
+  "Any country": {
+    "value": "Любая страна"
+  },
+  "Best pass rate": {
+    "value": "Лучшая проходимость"
+  },
+  "Candidate": {
+    "value": "Кандидат"
+  },
+  "Candidates evaluated per generation — each one costs live probes": {
+    "value": "Кандидатов на поколение — каждый требует живых проб"
+  },
+  "Candidates": {
+    "value": "Кандидаты"
+  },
+  "Config body": {
+    "value": "Тело конфига"
+  },
+  "Config evolution": {
+    "value": "Эволюция конфигов"
+  },
+  "Confirmations needed": {
+    "value": "Нужно подтверждений"
+  },
+  "Confirmed": {
+    "value": "Подтверждено"
+  },
+  "Copy config": {
+    "value": "Скопировать конфиг"
+  },
+  "Countries come from live probes, so the filter only narrows endpoints that are already classified": {
+    "value": "Страны приходят с живых проб, поэтому фильтр сужает только уже классифицированные адреса"
+  },
+  "Countries learned": {
+    "value": "Изученные страны"
+  },
+  "Country": {
+    "value": "Страна"
+  },
+  "DPI verdicts drift, so the hall of fame only lists configs confirmed in separate generations": {
+    "value": "Вердикты DPI дрейфуют, поэтому в зале славы только конфиги, подтверждённые в разных поколениях"
+  },
+  "Diversity": {
+    "value": "Разнообразие"
+  },
+  "EDA (UMDA)": {
+    "value": "EDA (UMDA)"
+  },
+  "EDA learns which values the winners share; GA recombines two parents": {
+    "value": "EDA изучает, какие значения разделяют победители; GA скрещивает двух родителей"
+  },
+  "Elite fraction": {
+    "value": "Доля элиты"
+  },
+  "Empty until a config repeats its passability in %s separate generations": {
+    "value": "Пусто, пока конфиг не повторит проходимость в %s разных поколениях"
+  },
+  "Endpoint countries": {
+    "value": "Страны адресов"
+  },
+  "Endpoints available": {
+    "value": "Доступно адресов"
+  },
+  "Estimated %1$s requests for the full run — budget %2$s will cut it short": {
+    "value": "Оценка: %1$s запросов на полный прогон — бюджета %2$s не хватит"
+  },
+  "Estimated %1$s requests for the full run": {
+    "value": "Оценка: %1$s запросов на полный прогон"
+  },
+  "Evolution log": {
+    "value": "Журнал эволюции"
+  },
+  "Evolve configs…": {
+    "value": "Эволюция конфигов…"
+  },
+  "First probes are still running": {
+    "value": "Первые пробы ещё идут"
+  },
+  "Frozen genes": {
+    "value": "Замороженные гены"
+  },
+  "Generation": {
+    "value": "Поколение"
+  },
+  "Generations": {
+    "value": "Поколения"
+  },
+  "Genes": {
+    "value": "Гены"
+  },
+  "Genetic algorithm": {
+    "value": "Генетический алгоритм"
+  },
+  "Hall of fame size": {
+    "value": "Размер зала славы"
+  },
+  "Hall of fame": {
+    "value": "Зал славы"
+  },
+  "Hard stop: every verdict costs up to 3 HTTP probes — the geo check rotates sources": {
+    "value": "Жёсткий стоп: на вердикт уходит до 3 HTTP-проб — гео-проверка чередует источники"
+  },
+  "How many top configs feed the frequency model": {
+    "value": "Сколько лучших конфигов питают частотную модель"
+  },
+  "Immigrant fraction": {
+    "value": "Доля иммигрантов"
+  },
+  "Keep fraction per round": {
+    "value": "Доля оставляемых на раунд"
+  },
+  "Last failures": {
+    "value": "Последние ошибки"
+  },
+  "Lifetime over this campaign": {
+    "value": "Время жизни за эту кампанию"
+  },
+  "Mutation rate": {
+    "value": "Вероятность мутации"
+  },
+  "Mutation space": {
+    "value": "Пространство мутаций"
+  },
+  "Nothing passed — probe failures": {
+    "value": "Проходимых нет — причины отказов проб"
+  },
+  "One and the same reason for every candidate is a probe-path problem, not a block — check the DNS server and the target country, then rerun": {
+    "value": "Одна и та же причина у всех кандидатов — это проблема пути пробы, а не блокировка: проверьте DNS-сервер и страну назначения, затем перезапустите прогон"
+  },
+  "Nothing to choose from yet": {
+    "value": "Выбирать пока нечего"
+  },
+  "Nothing to save — these configs could not be rebuilt": {
+    "value": "Сохранять нечего — эти конфиги не удалось пересобрать"
+  },
+  "Pass rate and diversity by generation": {
+    "value": "Проходимость и разнообразие по поколениям"
+  },
+  "Pass rate": {
+    "value": "Проходимость"
+  },
+  "Pass threshold": {
+    "value": "Порог прохождения"
+  },
+  "Passable now": {
+    "value": "Проходимых сейчас"
+  },
+  "Population": {
+    "value": "Популяция"
+  },
+  "Probe rounds (successive halving)": {
+    "value": "Раунды проб (последовательное деление пополам)"
+  },
+  "Probes": {
+    "value": "Пробы"
+  },
+  "Probing": {
+    "value": "Идёт проба"
+  },
+  "RTT": {
+    "value": "RTT"
+  },
+  "Random newcomers keep the search from collapsing on one answer": {
+    "value": "Случайные новички не дают поиску схлопнуться на одном ответе"
+  },
+  "Random seed": {
+    "value": "Случайное зерно"
+  },
+  "Rank": {
+    "value": "Ранг"
+  },
+  "Record fragmentation": {
+    "value": "Фрагментация записи"
+  },
+  "Reproducibility": {
+    "value": "Воспроизводимость"
+  },
+  "Request budget": {
+    "value": "Бюджет запросов"
+  },
+  "Request timeout": {
+    "value": "Таймаут запроса"
+  },
+  "Requests used": {
+    "value": "Затрачено запросов"
+  },
+  "Requests": {
+    "value": "Запросы"
+  },
+  "Reset defaults": {
+    "value": "Сбросить по умолчанию"
+  },
+  "Save %s": {
+    "value": "Сохранить %s"
+  },
+  "Saved %1$s configs to folder %2$s": {
+    "value": "Сохранено %1$s конфигов в папку «%2$s»"
+  },
+  "Search operator": {
+    "value": "Оператор поиска"
+  },
+  "Search": {
+    "value": "Поиск"
+  },
+  "Seed from your servers: %1$s of %2$s configs": {
+    "value": "Посев из ваших серверов: %1$s из %2$s конфигов"
+  },
+  "Seeds": {
+    "value": "Посев"
+  },
+  "Separate generations a config must repeat to reach the hall of fame": {
+    "value": "Сколько разных поколений должен повторить конфиг, чтобы попасть в зал славы"
+  },
+  "Start a run to see candidates here": {
+    "value": "Запустите прогон, чтобы увидеть здесь кандидатов"
+  },
+  "Start evolution": {
+    "value": "Начать эволюцию"
+  },
+  "TLS fragmentation": {
+    "value": "Фрагментация TLS"
+  },
+  "Target exit country": {
+    "value": "Страна целевого выхода"
+  },
+  "The endpoint pool is empty — run the endpoint scanner first": {
+    "value": "Пул адресов пуст — сначала запустите сканер эндпоинтов"
+  },
+  "There are no usable configs to evolve — generate or import WARP nodes first": {
+    "value": "Нет пригодных конфигов для эволюции — сначала создайте или импортируйте узлы WARP"
+  },
+  "Transports": {
+    "value": "Транспорты"
+  },
+  "confirmations": {
+    "value": "подтверждений"
+  },
+  "probes": {
+    "value": "проб"
   }
 }
