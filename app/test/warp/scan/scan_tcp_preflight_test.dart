@@ -70,7 +70,6 @@ void main() {
       timeout: const Duration(milliseconds: 400),
       // >0, иначе фаза 2 (и preflight вместе с ней) не запускается вовсе.
       maxGeoLookups: 4,
-      scanDns: false,
       log: log,
       onStatus: statuses.add,
     );
@@ -113,7 +112,6 @@ void main() {
       concurrency: 4,
       timeout: const Duration(milliseconds: 300),
       maxGeoLookups: 4,
-      scanDns: false,
       log: log,
       onStatus: statuses.add,
     );
@@ -225,7 +223,6 @@ void main() {
       concurrency: 4,
       timeout: const Duration(milliseconds: 300),
       maxGeoLookups: 8,
-      scanDns: false,
       log: log,
       onStatus: (_) {},
     );
