@@ -322,7 +322,7 @@ class _SubscriptionFiltersTabState extends State<SubscriptionFiltersTab> {
                   // закреплённую панель под списком.
                   padding: EdgeInsets.zero, // bottom-inset: handled — ниже bottom bar с SafeArea
                   itemCount: rules.length,
-                  onReorderItem: _reorder,
+                  onReorder: (oldIndex, newIndex) { if (oldIndex < newIndex) newIndex--; _reorder(oldIndex, newIndex); },
                   itemBuilder: (context, i) =>
                       _ruleTile(context, rules[i], i, key: ValueKey('rule-$i')),
                 ),

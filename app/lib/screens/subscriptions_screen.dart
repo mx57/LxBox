@@ -1156,7 +1156,8 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
           MediaQuery.of(context).padding.bottom + 24 + _snackBarClearance),
       buildDefaultDragHandles: false,
       itemCount: rows.length,
-      onReorderItem: (oldIndex, newIndex) {
+      onReorder: (oldIndex, newIndex) {
+        if (oldIndex < newIndex) newIndex--;
         _onUserInteractionDismissHighlight();
         // onReorderItem уже нормализует newIndex под удалённый элемент.
         unawaited(_reorderRows(ctrl, oldIndex, newIndex));

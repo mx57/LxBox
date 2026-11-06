@@ -396,7 +396,8 @@ class HomeNodeList extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 56).withSafeBottom(context),
       buildDefaultDragHandles: false,
       itemCount: displayList.length,
-      onReorderItem: (oldIndex, newIndex) {
+      onReorder: (oldIndex, newIndex) {
+        if (oldIndex < newIndex) newIndex--;
         // onReorderItem отдаёт newIndex уже без перетаскиваемого элемента —
         // сдвиг «-1 при move-down» делать не надо.
         if (oldIndex < pinnedCount) return; // pinned ряды не двигаются

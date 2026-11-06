@@ -688,7 +688,7 @@ class _DnsSettingsScreenState extends State<DnsSettingsScreen>
               physics: const NeverScrollableScrollPhysics(),
               buildDefaultDragHandles: false,
               itemCount: rows.length,
-              onReorderItem: _onReorderRules,
+              onReorder: (oldIndex, newIndex) { if (oldIndex < newIndex) newIndex--; _onReorderRules(oldIndex, newIndex); },
               itemBuilder: (ctx, i) {
                 final row = rows[i];
                 if (row == -1) {

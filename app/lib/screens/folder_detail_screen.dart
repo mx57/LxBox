@@ -1223,7 +1223,8 @@ class _FolderDetailScreenState extends State<FolderDetailScreen>
             12, 4, 12, MediaQuery.of(context).padding.bottom + 24),
         buildDefaultDragHandles: false,
         itemCount: members.length,
-        onReorderItem: (oldIndex, newIndex) {
+        onReorder: (oldIndex, newIndex) {
+          if (oldIndex < newIndex) newIndex--;
           // onReorderItem уже приводит newIndex к списку БЕЗ перетаскиваемого
           // элемента — ручной сдвиг «-1 при move вниз» здесь не нужен.
           final idx = _index;

@@ -139,6 +139,13 @@ Genome mutate(
     final t = out.tokens()..[locus] = value;
     out = Genome.fromTokens(t);
   }
+  // Защита от расхождения порта и транспорта: после случайных мутаций порт
+  // обязан оставаться валидным для выбранного транспорта, чтобы особь не
+  // браковалась заранее несовместимой комбинацией (напр. порт 2408 на MASQUE).
+  final validPorts = pools.portsFor(out.transport);
+  if (validPorts.isNotEmpty && !validPorts.contains(out.port)) {
+    out = out.copyWith(port: validPorts[rng.nextInt(validPorts.length)]);
+  }
   return out;
 }
 

@@ -511,7 +511,7 @@ class _ChainEditScreenState extends State<ChainEditScreen> with SnackHelper {
       physics: const NeverScrollableScrollPhysics(),
       buildDefaultDragHandles: false,
       itemCount: _hops.length,
-      onReorderItem: _reorderHop,
+      onReorder: (oldIndex, newIndex) { if (oldIndex < newIndex) newIndex--; _reorderHop(oldIndex, newIndex); },
       itemBuilder: (ctx, i) =>
           KeyedSubtree(key: ValueKey('hop-${_hops[i]}'), child: _hopTile(i, cs)),
     );

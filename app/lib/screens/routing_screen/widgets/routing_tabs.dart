@@ -132,7 +132,7 @@ class RoutingRulesTab extends StatelessWidget {
           physics: const NeverScrollableScrollPhysics(),
           buildDefaultDragHandles: false,
           itemCount: itemCount,
-          onReorderItem: onReorder,
+          onReorder: (oldIndex, newIndex) { if (oldIndex < newIndex) newIndex--; onReorder(oldIndex, newIndex); },
           itemBuilder: (ctx, i) =>
               KeyedSubtree(key: itemKey(i), child: itemBuilder(i)),
         ),
