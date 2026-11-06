@@ -23,6 +23,11 @@ void main() {
   test('country names resolve to Russian where known', () {
     expect(countryName('DE'), 'Германия');
     expect(countryName('RU'), 'Россия');
+    expect(countryName('KZ'), 'Казахстан');
+    expect(countryName('UZ'), 'Узбекистан');
+    expect(countryName('TM'), 'Туркменистан');
+    expect(countryName('TJ'), 'Таджикистан');
+    expect(countryName('AW'), 'Аруба');
     expect(countryName(''), '');
     expect(countryName('zz'), 'ZZ');
   });

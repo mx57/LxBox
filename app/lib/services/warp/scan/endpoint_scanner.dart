@@ -306,6 +306,25 @@ const Map<String, String> _countryNames = {
   'PY': 'Парагвай',
   'RE': 'Реюньон',
   'SV': 'Сальвадор',
+  'AW': 'Аруба',
+  'BB': 'Барбадос',
+  'BN': 'Бруней',
+  'BO': 'Боливия',
+  'BQ': 'Бонайре',
+  'CW': 'Кюрасао',
+  'GD': 'Гренада',
+  'GF': 'Французская Гвиана',
+  'GY': 'Гайана',
+  'KH': 'Камбоджа',
+  'LA': 'Лаос',
+  'LC': 'Сент-Люсия',
+  'MM': 'Мьянма',
+  'MV': 'Мальдивы',
+  'SR': 'Суринам',
+  'SX': 'Синт-Мартен',
+  'TJ': 'Таджикистан',
+  'TL': 'Восточный Тимор',
+  'TM': 'Туркменистан',
 };
 
 String countryName(String code) =>
@@ -440,6 +459,51 @@ const Map<String, String> kColoCountries = {
   'PER': 'AU', 'SYD': 'AU', 'MFM': 'MO', 'MNL': 'PH', 'CEB': 'PH',
   'CRK': 'PH', 'DVO': 'PH', 'NRT': 'JP', 'PNQ': 'IN', 'SIN': 'SG',
   'SUB': 'ID', 'TPE': 'TW', 'ULN': 'MN', 'NQZ': 'KZ',
+  // Расширенная база датацентров Cloudflare (Европа, Азия, СНГ, Америка)
+  'AAL': 'DK', 'AAR': 'DK', 'ABA': 'RU', 'ABQ': 'US', 'ABZ': 'GB',
+  'AHB': 'SA', 'ALB': 'US', 'ANR': 'BE', 'ARH': 'RU', 'ASB': 'TM',
+  'AUA': 'AW', 'BCD': 'PH', 'BFS': 'GB', 'BGI': 'BB', 'BGR': 'US',
+  'BHD': 'GB', 'BHK': 'UZ', 'BLL': 'DK', 'BLQ': 'IT', 'BOH': 'GB',
+  'BOI': 'US', 'BON': 'BQ', 'BQS': 'RU', 'BQT': 'BY', 'BRI': 'IT',
+  'BSL': 'CH', 'BSR': 'IQ', 'BTK': 'RU', 'BTV': 'US', 'BUF': 'US',
+  'BUS': 'GE', 'BWA': 'NP', 'BWN': 'BN', 'CAG': 'IT', 'CAK': 'US',
+  'CAY': 'GF', 'CBB': 'BO', 'CBR': 'AU', 'CEK': 'RU', 'CGN': 'DE',
+  'CGP': 'BD', 'CHA': 'US', 'CHS': 'US', 'CIT': 'KZ', 'COS': 'US',
+  'CRP': 'US', 'CRZ': 'TM', 'CSY': 'RU', 'CUR': 'CW', 'CWC': 'UA',
+  'CWL': 'GB', 'CXB': 'BD', 'DIL': 'TL', 'DRS': 'DE', 'DSM': 'US',
+  'DYR': 'RU', 'DYU': 'TJ', 'EBL': 'IQ', 'ELP': 'US', 'ELQ': 'SA',
+  'EVV': 'US', 'EXT': 'GB', 'FAR': 'US', 'FAY': 'US', 'FEG': 'UZ',
+  'FLR': 'IT', 'FMO': 'DE', 'FWA': 'US', 'GEO': 'GY', 'GES': 'PH',
+  'GIZ': 'SA', 'GLA': 'GB', 'GME': 'BY', 'GND': 'GD', 'GOA': 'IT',
+  'GRR': 'US', 'GRZ': 'AT', 'GSO': 'US', 'GSP': 'US', 'GUW': 'KZ',
+  'HAJ': 'DE', 'HAS': 'SA', 'HBA': 'AU', 'HPN': 'US', 'HRI': 'LK',
+  'HSV': 'US', 'HTA': 'RU', 'IJK': 'RU', 'IKT': 'RU', 'ILO': 'PH',
+  'INN': 'AT', 'ISU': 'IQ', 'JAN': 'US', 'JAX': 'US', 'JSR': 'BD',
+  'KEJ': 'RU', 'KGF': 'KZ', 'KGP': 'RU', 'KHV': 'RU', 'KLF': 'RU',
+  'KLU': 'AT', 'KRW': 'TM', 'KUF': 'RU', 'KUT': 'GE', 'KVD': 'AZ',
+  'LAN': 'US', 'LBA': 'GB', 'LBD': 'TJ', 'LCY': 'GB', 'LEI': 'ES',
+  'LEX': 'US', 'LHE': 'PK', 'LIL': 'FR', 'LIT': 'US', 'LNZ': 'AT',
+  'LPB': 'BO', 'LPL': 'GB', 'LPQ': 'LA', 'LTN': 'GB', 'LWN': 'AM',
+  'MAF': 'US', 'MCX': 'RU', 'MCY': 'AU', 'MDL': 'MM', 'MED': 'SA',
+  'MFE': 'US', 'MLE': 'MV', 'MMK': 'RU', 'MOB': 'US', 'MRV': 'RU',
+  'MUX': 'PK', 'MVQ': 'BY', 'MYR': 'US', 'NBC': 'RU', 'NJF': 'IQ',
+  'NLV': 'UA', 'NOC': 'IE', 'NOZ': 'RU', 'NTL': 'AU', 'NVI': 'UZ',
+  'OGZ': 'RU', 'OKC': 'US', 'OMA': 'US', 'OMS': 'RU', 'OOL': 'AU',
+  'ORF': 'US', 'ORK': 'IE', 'OSS': 'KG', 'OST': 'BE', 'PAD': 'DE',
+  'PBM': 'SR', 'PEE': 'RU', 'PES': 'RU', 'PEW': 'PK', 'PKC': 'RU',
+  'PKR': 'NP', 'PLQ': 'LT', 'PNH': 'KH', 'PNS': 'US', 'PSA': 'IT',
+  'PVD': 'US', 'PWM': 'US', 'PWQ': 'KZ', 'REN': 'RU', 'REP': 'KH',
+  'RIC': 'US', 'RJH': 'BD', 'RNO': 'US', 'RNS': 'FR', 'ROA': 'US',
+  'ROC': 'US', 'SAV': 'US', 'SBN': 'US', 'SCO': 'KZ', 'SCQ': 'ES',
+  'SDF': 'US', 'SGC': 'RU', 'SGF': 'US', 'SHV': 'US', 'SIP': 'UA',
+  'SKD': 'UZ', 'SKT': 'PK', 'SKX': 'RU', 'SLL': 'OM', 'SNN': 'IE',
+  'SOU': 'GB', 'STW': 'RU', 'SXB': 'FR', 'SYR': 'US', 'SZG': 'AT',
+  'TAB': 'TT', 'TIF': 'SA', 'TLH': 'US', 'TOF': 'RU', 'TRD': 'NO',
+  'TSE': 'KZ', 'TSF': 'IT', 'TSV': 'AU', 'TUL': 'US', 'UGC': 'UZ',
+  'UKK': 'KZ', 'UMY': 'UA', 'URA': 'KZ', 'UUS': 'RU', 'UVF': 'LC',
+  'VCE': 'IT', 'VIN': 'UA', 'VPS': 'US', 'VTB': 'BY', 'VTE': 'LA',
+  'VVI': 'BO', 'XNH': 'IQ', 'YEG': 'CA', 'YHZ': 'CA', 'YKS': 'RU',
+  'YVR': 'CA', 'YWG': 'CA', 'ZAD': 'HR', 'ZAM': 'PH', 'ZYL': 'BD',
 };
 
 /// §846 — страна узла по IATA-коду; '' при неизвестном коде.
@@ -1714,10 +1778,7 @@ class EndpointScanner {
     ScanPool? pool,
     String sni,
   ) {
-    final parts = ep.split(':');
-    final ip = parts[0];
-    final explicitPort =
-        parts.length > 1 ? int.tryParse(parts[1]) : null;
+    final (ip, explicitPort) = _splitHostPort(ep);
     switch (transport) {
       case EndpointTransport.wg:
         final c = ScanCandidate(
@@ -1743,6 +1804,27 @@ class EndpointScanner {
         final uri = builder.uriFor(c);
         return uri == null ? null : parseLinkViaPipeline(uri);
     }
+  }
+
+  /// Парсит адрес вида ip, ip:port или [ipv6]:port в пару (host, port).
+  static (String host, int? port) _splitHostPort(String ep) {
+    final trimmed = ep.trim();
+    if (trimmed.startsWith('[')) {
+      final close = trimmed.indexOf(']');
+      if (close > 0) {
+        final host = trimmed.substring(1, close);
+        final colon = trimmed.indexOf(':', close);
+        final port = colon >= 0 ? int.tryParse(trimmed.substring(colon + 1)) : null;
+        return (host, port);
+      }
+    }
+    final colon = trimmed.lastIndexOf(':');
+    if (colon >= 0 && trimmed.indexOf(':') == colon) {
+      final host = trimmed.substring(0, colon);
+      final port = int.tryParse(trimmed.substring(colon + 1));
+      return (host, port);
+    }
+    return (trimmed, null);
   }
 }
 
