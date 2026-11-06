@@ -1,8 +1,12 @@
+import 'dart:math';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lxbox/models/template_vars.dart';
 import 'package:lxbox/services/warp/masque_account.dart';
+import 'package:lxbox/services/warp/scan/candidate_generator.dart';
 import 'package:lxbox/services/warp/scan/scan_models.dart';
 import 'package:lxbox/services/warp/scan/scan_node_builder.dart';
+import 'package:lxbox/services/warp/scan/scan_pool.dart';
 import 'package:lxbox/services/warp/warp_account.dart';
 
 import '../../parser/engine_test_setup.dart';
@@ -120,5 +124,47 @@ void main() {
       expect(uri, startsWith('masque://'));
       expect(uri, isNot(contains('keepalive=25')));
     });
+  });
+
+  test('заголовок узла (nodeTitle) проносится в фрагмент URI', () {
+    final b = ScanNodeBuilder(warp: warp(), masque: masque());
+
+    final awg = ScanCandidate(
+      ip: '162.159.192.7',
+      port: 2408,
+      protocol: ScanProtocol.awg,
+      sni: 'ya.ru',
+      awgParams: const AwgParams(ip: 'quic', jc: 4, jmin: 40, jmax: 70),
+    );
+    final awgUri = Uri.decodeComponent(b.uriFor(awg)!);
+    expect(awgUri, contains('WARP AWG (quic ya.ru)'));
+
+    final h3 = b.uriFor(cand(ScanProtocol.masqueH3, ip: '162.159.198.5', port: 443))!;
+    expect(Uri.decodeComponent(h3), contains('WARP MASQUE (h3: yandex.ru)'));
+  });
+
+  // §843b — сквозной регресс цепочки «скан → пул → генератор → URI»:
+  // fromEndpoints раньше отдавал `ip:port` как h3-хост, и узел собирался с
+  // двойным портом (`masque://…@1.2.3.4:2408:443`) — ядро такой URI не примет.
+  test('§843b узлы из ScanPool.fromEndpoints не несут двойной порт', () {
+    final pool = ScanPool.fromEndpoints([
+      '162.159.192.1:2408',
+      '188.114.96.7:443',
+    ]);
+    expect(pool, isNotNull);
+    final cands = CandidateGenerator(pool!, rng: Random(7))
+        .seed(120)
+        .where((c) => c.protocol.isMasque);
+    expect(cands, isNotEmpty,
+        reason: 'из endpoints-пула обязаны сеяться MASQUE');
+    final b = ScanNodeBuilder(masque: masque());
+    for (final c in cands) {
+      expect(c.ip, isNot(contains(':')),
+          reason: 'IP кандидата с портом: ${c.ip}');
+      final uri = b.uriFor(c);
+      expect(uri, isNotNull);
+      expect(uri, contains('@${c.ip}:${c.port}?'));
+      expect(RegExp(r':\d+:').hasMatch(uri!), isFalse, reason: uri);
+    }
   });
 }
