@@ -3,13 +3,19 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lxbox/services/evolution/genome.dart';
 import 'package:lxbox/services/evolution/pools.dart';
+import 'package:lxbox/services/warp/awg_profile.dart';
 import 'package:lxbox/services/warp/scan/scan_pool.dart';
 
 /// §848 — мутационные пулы: границы домена, фильтр по странам, заморозка
 /// локусов и ограничение по транспортам.
 void main() {
   const pool = EvolutionPools(
-    endpoints: ['162.159.192.1', '162.159.192.2', '185.228.228.10', 'dns.google'],
+    endpoints: [
+      '162.159.192.1',
+      '162.159.192.2',
+      '185.228.228.10',
+      'dns.google',
+    ],
     endpointsByCountry: {
       'de': ['162.159.192.1', '185.228.228.10'],
       'nl': ['162.159.192.2'],
@@ -30,15 +36,19 @@ void main() {
     });
 
     test('endpointsFor: только адреса выбранных стран, без дублей', () {
-      expect(
-        pool.endpointsFor(const ['de', 'nl', 'de']),
-        ['162.159.192.1', '185.228.228.10', '162.159.192.2'],
-      );
+      expect(pool.endpointsFor(const ['de', 'nl', 'de']), [
+        '162.159.192.1',
+        '185.228.228.10',
+        '162.159.192.2',
+      ]);
     });
 
     test('endpointsFor: пустой результат фильтра не обнуляет поиск', () {
-      expect(pool.endpointsFor(const ['zz']), pool.endpoints,
-          reason: 'страна без адресов → фолбэк на полный пул');
+      expect(
+        pool.endpointsFor(const ['zz']),
+        pool.endpoints,
+        reason: 'страна без адресов → фолбэк на полный пул',
+      );
       expect(pool.endpointsFor(const ['']), ['dns.google']);
     });
 
@@ -66,8 +76,20 @@ void main() {
       expect(onlyH2.alleles(EvoLocus.transport).values, ['h2']);
       // Пустое множество транспортов — не «запрет всего», а «не ограничивать».
       const none = EvolutionPools(transports: {});
-      expect(none.alleles(EvoLocus.transport).values.length,
-          EvoTransport.values.length);
+      expect(
+        none.alleles(EvoLocus.transport).values.length,
+        EvoTransport.values.length,
+      );
+    });
+
+    test('профили AWG — домен локуса awgProfile', () {
+      expect(pool.alleles(EvoLocus.awgProfile).values, ['warp15']);
+      const cpsOnly = EvolutionPools(awgProfiles: {AwgProfile.warpCps});
+      expect(cpsOnly.alleles(EvoLocus.awgProfile).values, ['warp-cps']);
+      final rng = Random(12);
+      for (var i = 0; i < 60; i++) {
+        expect(cpsOnly.random(rng).awgProfile, AwgProfile.warpCps);
+      }
     });
 
     test('portsFor соответствует транспорту', () {
@@ -83,12 +105,18 @@ void main() {
       for (var i = 0; i < 200; i++) {
         final g = pool.random(rng);
         expect(pool.endpoints, contains(g.endpoint));
-        expect([...pool.wgPorts, ...pool.h3Ports, ...pool.h2Ports],
-            contains(g.port));
+        expect([
+          ...pool.wgPorts,
+          ...pool.h3Ports,
+          ...pool.h2Ports,
+        ], contains(g.port));
         expect([...pool.sni, ''], contains(g.sni));
         expect([...pool.dnsTags, ''], contains(g.dnsTag));
-        expect(pool.portsFor(g.transport), contains(g.port),
-            reason: 'порт обязан подходить транспорту');
+        expect(
+          pool.portsFor(g.transport),
+          contains(g.port),
+          reason: 'порт обязан подходить транспорту',
+        );
       }
     });
 
@@ -107,15 +135,20 @@ void main() {
 
   group('RestrictedPools', () {
     test('замороженный локус имеет пустой домен', () {
-      const r = RestrictedPools(pool, disabledLoci: {EvoLocus.dns, EvoLocus.mtu});
+      const r = RestrictedPools(
+        pool,
+        disabledLoci: {EvoLocus.dns, EvoLocus.mtu},
+      );
       expect(r.alleles(EvoLocus.dns).isEmpty, isTrue);
       expect(r.alleles(EvoLocus.mtu).isEmpty, isTrue);
       expect(r.alleles(EvoLocus.sni).values, pool.sni);
     });
 
     test('замороженный локус не получает значение и из посева', () {
-      const r = RestrictedPools(pool,
-          disabledLoci: {EvoLocus.dns, EvoLocus.fragment, EvoLocus.sniCase});
+      const r = RestrictedPools(
+        pool,
+        disabledLoci: {EvoLocus.dns, EvoLocus.fragment, EvoLocus.sniCase},
+      );
       final rng = Random(5);
       for (var i = 0; i < 100; i++) {
         final g = r.random(rng);
@@ -134,6 +167,29 @@ void main() {
         expect(g.transport, EvoTransport.masqueH2);
         expect(g.port, 8443, reason: 'порт пересэмплирован под транспорт');
       }
+    });
+
+    test('галки профилей ограничивают домен и посев AWG', () {
+      const base = EvolutionPools(
+        transports: {EvoTransport.awg},
+        awgProfiles: {AwgProfile.warp15},
+      );
+      const r = RestrictedPools(
+        base,
+        transports: {EvoTransport.awg},
+        awgProfiles: {AwgProfile.warpCps},
+      );
+      expect(r.alleles(EvoLocus.awgProfile).values, ['warp-cps']);
+      expect(r.random(Random(6)).awgProfile, AwgProfile.warpCps);
+    });
+
+    test('замороженный awgProfile возвращает warp15', () {
+      const r = RestrictedPools(
+        EvolutionPools(awgProfiles: {AwgProfile.warpCps}),
+        disabledLoci: {EvoLocus.awgProfile},
+      );
+      expect(r.alleles(EvoLocus.awgProfile).isEmpty, isTrue);
+      expect(r.random(Random(6)).awgProfile, AwgProfile.warp15);
     });
 
     test('непересечение с базой не даёт пустой локус transport', () {
@@ -157,8 +213,13 @@ void main() {
 
   group('Эволюция из пула скана', () {
     test('fromScanPool(null) живёт на штатных портах', () {
-      final p = EvolutionPools.fromScanPool(null,
-          dnsTags: const ['a'], endpointsByCountry: const {'de': ['1.1.1.1']});
+      final p = EvolutionPools.fromScanPool(
+        null,
+        dnsTags: const ['a'],
+        endpointsByCountry: const {
+          'de': ['1.1.1.1'],
+        },
+      );
       expect(p.wgPorts, [2408, 500, 1701, 4500]);
       expect(p.h3Ports, [443, 4443, 8095]);
       expect(p.h2Ports, [500, 4500, 8443]);
@@ -182,18 +243,27 @@ void main() {
         masquePortsH2: const [8443],
         masqueSniPool: const ['www.cloudflare.com'],
       );
-      final p = EvolutionPools.fromScanPool(scan,
-          sniOverride: const ['mail.ru'], dnsTags: const ['d1']);
+      final p = EvolutionPools.fromScanPool(
+        scan,
+        sniOverride: const ['mail.ru'],
+        dnsTags: const ['d1'],
+      );
       expect(p.wgPorts, [2408, 4500]);
       expect(p.h3Ports, [443, 8095]);
       expect(p.h2Ports, [8443]);
-      expect(p.endpoints, containsAll(<String>[
+      expect(
+        p.endpoints,
+        containsAll(<String>[
         'engage.cloudflareclient.com',
         '162.159.198.1',
         '162.159.192.0',
-      ]));
+        ]),
+      );
       expect(p.endpoints, hasLength(3));
-      expect(p.alleles(EvoLocus.sni).values, containsAll(['mail.ru', 'yandex.ru']));
+      expect(
+        p.alleles(EvoLocus.sni).values,
+        containsAll(['mail.ru', 'yandex.ru']),
+      );
       expect(p.alleles(EvoLocus.dns).values, ['', 'd1']);
     });
   });

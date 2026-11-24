@@ -343,7 +343,7 @@ The node body itself — the sing-box JSON kept in the launcher state. The path 
 - <a id="body-i2"></a>**`i2`** — Second custom junk packet.
   - Type: string
   - Set by link parameter: [`i2`](#link-proto-i2)
-  - Conflicts with: `ip`
+  - Conflicts with: `ip` when `ip=sip`
   - Only written when: core ≥ `1.13.13-lx.1`, lx fork only, build tag `with_awg`
   - Means protocol level `awg1.5`
   - Form: block `amnezia`
@@ -531,7 +531,7 @@ Every code that can be raised on a node of this scheme, including the ones comin
   - [`i1`](#body-i1) — conflicts with `id` → removed
   - [`i1`](#body-i1) — conflicts with `ip` → removed
   - [`i1`](#body-i1) — conflicts with `ib` → removed
-  - [`i2`](#body-i2) — conflicts with `ip` → removed
+  - [`i2`](#body-i2) — conflicts with `ip` when `ip=sip` → removed
 - [`field_missing`](../warnings.md#field_missing)
   - [`peers`](#body-peers) — required and missing → node dropped
   - [`peers.address`](#body-peers-address) — the value does not fit the field → node dropped

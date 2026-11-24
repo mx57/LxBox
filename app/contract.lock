@@ -1,5 +1,8 @@
-source=/var/folders/nk/7972z82j36bb6cr5_x88wgk00000gn/T/tmp.chwGb7GPvY/contract
+base_source=/var/folders/nk/7972z82j36bb6cr5_x88wgk00000gn/T/tmp.chwGb7GPvY/contract
 launcher_repo=/Users/macbook/projects/singbox-launcher
-source_sha=1ed88a79f38ccefca37a82f7277911725ff19395
-synced_at=2026-11-15T23:43:45Z
-sha256=e4fbf917ec5e627825f9ec0d040ce5a4ddf4331efefd74601478d139568938fd
+base_source_sha=1ed88a79f38ccefca37a82f7277911725ff19395
+base_sha256=e4fbf917ec5e627825f9ec0d040ce5a4ddf4331efefd74601478d139568938fd
+source_sha=
+patch=740-i2-conflicts-only-with-ip-sip
+patched_at=2026-11-24
+sha256=48b83da534031fdcb7334549117638a4a503fd208ddc891ab1aafeac49b98211

@@ -3,6 +3,7 @@ import 'package:lxbox/models/node_spec.dart';
 import 'package:lxbox/models/template_vars.dart';
 import 'package:lxbox/services/evolution/genome.dart';
 import 'package:lxbox/services/evolution/seeds.dart';
+import 'package:lxbox/services/warp/awg_profile.dart';
 import 'package:lxbox/services/warp/masque_account.dart';
 import 'package:lxbox/services/warp/scan/scan_models.dart';
 import 'package:lxbox/services/warp/scan/scan_node_builder.dart';
@@ -42,27 +43,43 @@ void main() {
         createdAt: '2026-01-01T00:00:00Z',
       );
 
-  NodeSpec awgNode({String ip = '162.159.192.7', int port = 2408, String sni = 'yandex.ru'}) {
+  NodeSpec awgNode({
+    String ip = '162.159.192.7',
+    int port = 2408,
+    String sni = 'yandex.ru',
+    AwgProfile profile = AwgProfile.warp15,
+  }) {
     final uri = ScanNodeBuilder(warp: warp(), wgKeepalive: 25).uriFor(
       ScanCandidate(
         ip: ip,
         port: port,
         protocol: ScanProtocol.awg,
         sni: sni,
-        awgParams: const AwgParams(ip: 'quic', jc: 4, jmin: 40, jmax: 70),
+        awgParams: AwgParams(
+          ip: 'quic',
+          jc: 4,
+          jmin: 40,
+          jmax: 70,
+          profile: profile,
+        ),
       ),
     )!;
     return parseLinkAs<WireguardSpec>(uri)!;
   }
 
-  NodeSpec masqueNode(
-      {String ip = '162.159.199.5', int port = 4443, EvoTransport t = EvoTransport.masqueH3}) {
-    final uri = ScanNodeBuilder(masque: masque()).uriFor(ScanCandidate(
+  NodeSpec masqueNode({
+    String ip = '162.159.199.5',
+    int port = 4443,
+    EvoTransport t = EvoTransport.masqueH3,
+  }) {
+    final uri = ScanNodeBuilder(masque: masque()).uriFor(
+      ScanCandidate(
       ip: ip,
       port: port,
       protocol: t.scanProtocol,
       sni: 'www.cloudflare.com',
-    ))!;
+      ),
+    )!;
     return parseLinkAs<MasqueSpec>(uri)!;
   }
 
@@ -70,6 +87,7 @@ void main() {
     test('AWG-узел → геном с адресом кандидата и приманкой', () {
       final g = genomeOfNode(awgNode())!;
       expect(g.transport, EvoTransport.awg);
+      expect(g.awgProfile, AwgProfile.warp15);
       expect(g.endpoint, '162.159.192.7');
       expect(g.port, 2408);
       expect(g.keepalive, 25);
@@ -81,6 +99,17 @@ void main() {
       expect(g.sni, 'yandex.ru');
     });
 
+    test('warpCps узел распознаётся по CPS-полям, а не по одним I2..I5', () {
+      final cps = genomeOfNode(awgNode(profile: AwgProfile.warpCps))!;
+      expect(cps.awgProfile, AwgProfile.warpCps);
+      expect(genomeOfNode(awgNode())!.awgProfile, AwgProfile.warp15);
+      final set = seedsFromNodes([
+        awgNode(),
+        awgNode(profile: AwgProfile.warpCps),
+      ]);
+      expect(set.genomes, hasLength(2), reason: 'профиль входит в identity');
+    });
+
     test('MASQUE h3 и h2 → соответствующий транспорт и SNI', () {
       final h3 = genomeOfNode(masqueNode())!;
       expect(h3.transport, EvoTransport.masqueH3);
@@ -88,8 +117,9 @@ void main() {
       expect(h3.port, 4443);
       expect(h3.sni, 'www.cloudflare.com');
 
-      final h2 = genomeOfNode(masqueNode(
-          ip: '162.159.198.5', port: 8443, t: EvoTransport.masqueH2))!;
+      final h2 = genomeOfNode(
+        masqueNode(ip: '162.159.198.5', port: 8443, t: EvoTransport.masqueH2),
+      )!;
       expect(h2.transport, EvoTransport.masqueH2);
       expect(h2.endpoint, '162.159.198.5');
       expect(h2.port, 8443);
@@ -105,7 +135,9 @@ void main() {
     });
 
     test('не-WARP узел не эволюционируем', () {
-      final socks = parseLinkAs<SocksSpec>('socks5://user:pass@1.2.3.4:1080#node');
+      final socks = parseLinkAs<SocksSpec>(
+        'socks5://user:pass@1.2.3.4:1080#node',
+      );
       expect(socks, isNotNull);
       expect(genomeOfNode(socks!), isNull);
     });
@@ -128,21 +160,20 @@ void main() {
 
   group('seedsFromNodes', () {
     test('считает看过е узлы и не дублирует одинаковые геномы', () {
-      final set = seedsFromNodes([
-        awgNode(),
-        awgNode(),
-        masqueNode(),
-      ]);
+      final set = seedsFromNodes([awgNode(), awgNode(), masqueNode()]);
       expect(set.total, 3);
       expect(set.genomes, hasLength(2));
       expect(set.skippedCount, 0);
-      expect(set.genomes.map((g) => g.transport).toSet(),
-          {EvoTransport.awg, EvoTransport.masqueH3});
+      expect(set.genomes.map((g) => g.transport).toSet(), {
+        EvoTransport.awg,
+        EvoTransport.masqueH3,
+      });
     });
 
     test('подписной протокол попадает в notWarp, а не в молчание', () {
       final ss = parseLinkAs<ShadowsocksSpec>(
-          'ss://YWVzLTI1Ni1nY206cGFzcw==@198.51.100.26:8388#three')!;
+        'ss://YWVzLTI1Ni1nY206cGFzcw==@198.51.100.26:8388#three',
+      )!;
       final set = seedsFromNodes([ss]);
       expect(set.genomes, isEmpty);
       expect(set.skipped[SeedSkipReason.notWarp], 1);

@@ -23,6 +23,7 @@ import 'dart:math';
 
 import '../../models/node_spec.dart' show deepCopyJson;
 import '../contract/body_sanitizer.dart' show fieldAllowedOn;
+import '../warp/awg_profile.dart';
 import '../warp/scan/scan_models.dart';
 
 /// Транспорт узла в терминах эволюции. Совпадает с [ScanProtocol]: AWG =
@@ -52,6 +53,7 @@ enum EvoTransport {
 /// Локусы генома. Порядок — порядок обхода в модели аллелей и в [Genome.tokens].
 enum EvoLocus {
   transport,
+  awgProfile,
   endpoint,
   port,
   sni,
@@ -84,6 +86,7 @@ typedef GeneTokens = Map<EvoLocus, String>;
 class Genome {
   const Genome({
     required this.transport,
+    this.awgProfile = AwgProfile.warp15,
     required this.endpoint,
     required this.port,
     this.sni = '',
@@ -102,6 +105,9 @@ class Genome {
   });
 
   final EvoTransport transport;
+
+  /// §740 — профиль WARP-декоя. Для MASQUE не влияет на тело.
+  final AwgProfile awgProfile;
 
   /// Хост без порта (IP-литерал или домен).
   final String endpoint;
@@ -152,11 +158,13 @@ class Genome {
   /// Каноническая строка особи. Ею сопоставляются повторные наблюдения одного
   /// и того же кандидата между поколениями (гистерезис архива) и снимается
   /// дублирование посева.
-  String get key => tokens().entries.map((e) => '${e.key.wire}=${e.value}').join('|');
+  String get key =>
+      tokens().entries.map((e) => '${e.key.wire}=${e.value}').join('|');
 
   /// Значения всех локусов в строковой форме.
   GeneTokens tokens() => {
         EvoLocus.transport: transport.wire,
+        EvoLocus.awgProfile: awgProfile.wire,
         EvoLocus.endpoint: endpoint,
         EvoLocus.port: '$port',
         EvoLocus.sni: sni,
@@ -176,6 +184,7 @@ class Genome {
 
   static Genome fromTokens(GeneTokens t) => Genome(
         transport: EvoTransport.fromWire(t[EvoLocus.transport] ?? 'awg'),
+        awgProfile: AwgProfile.fromWire(t[EvoLocus.awgProfile]),
         endpoint: t[EvoLocus.endpoint] ?? '',
         port: int.tryParse(t[EvoLocus.port] ?? '') ?? 2408,
         sni: t[EvoLocus.sni] ?? '',
@@ -195,6 +204,7 @@ class Genome {
 
   Genome copyWith({
     EvoTransport? transport,
+    AwgProfile? awgProfile,
     String? endpoint,
     int? port,
     String? sni,
@@ -213,6 +223,7 @@ class Genome {
   }) =>
       Genome(
         transport: transport ?? this.transport,
+        awgProfile: awgProfile ?? this.awgProfile,
         endpoint: endpoint ?? this.endpoint,
         port: port ?? this.port,
         sni: sni ?? this.sni,
@@ -234,6 +245,7 @@ class Genome {
 
   Map<String, Object> _typed() => {
         'transport': transport.wire,
+        'awgProfile': awgProfile.wire,
         'endpoint': endpoint,
         'port': port,
         'sni': sni,
@@ -253,6 +265,7 @@ class Genome {
 
   static Genome fromJson(Map<String, dynamic> j) => Genome(
         transport: EvoTransport.fromWire('${j['transport'] ?? 'awg'}'),
+        awgProfile: AwgProfile.fromWire(j['awgProfile'] as String?),
         endpoint: '${j['endpoint'] ?? ''}',
         port: (j['port'] as num?)?.toInt() ?? 2408,
         sni: '${j['sni'] ?? ''}',
@@ -273,7 +286,7 @@ class Genome {
   String get json => jsonEncode(_typed());
 
   /// Доля локусов, которые различаются (0..1). Нужна не для отбора, а для
-  /// честной картинки в UI: «популяция разошлась по X из 16 параметров».
+  /// честной картинки в UI: «популяция разошлась по X параметров».
   double distanceTo(Genome other) {
     final a = tokens();
     final b = other.tokens();
@@ -288,7 +301,9 @@ class Genome {
   String get shortLabel {
     final host = endpoint.isEmpty ? '—' : endpoint;
     final tail = sni.isEmpty ? '' : ' · $sni';
-    return '${transport.wire} · $host:$port$tail';
+    final profile =
+        transport == EvoTransport.awg ? ' · ${awgProfile.wire}' : '';
+    return '${transport.wire}$profile · $host:$port$tail';
   }
 
   // ── сборка тела ─────────────────────────────────────────────────────────
@@ -311,6 +326,7 @@ class Genome {
                 jc: jc,
                 jmin: jitterMin,
                 jmax: jitterMax,
+                profile: awgProfile,
               )
             : null,
       );
@@ -335,9 +351,8 @@ class Genome {
       }
       if (mtu > 0 && fieldAllowedOn(body, 'mtu')) body['mtu'] = mtu;
       final tls = _tlsBlock(body);
-      final name = sniCase > 0 && sni.isNotEmpty
-          ? caseShuffle(sni, sniCase)
-          : sni;
+      final name =
+          sniCase > 0 && sni.isNotEmpty ? caseShuffle(sni, sniCase) : sni;
       if (name.isEmpty) {
         tls.remove('server_name');
       } else {
@@ -381,6 +396,13 @@ class Genome {
       body['jc'] = jc;
       body['jmin'] = jitterMin;
       body['jmax'] = jitterMax;
+      if (awgProfile == AwgProfile.warpCps) {
+        body.addAll(awgProfile.extraFields);
+      } else {
+        for (final key in const ['i2', 'i3', 'i4', 'i5']) {
+          body.remove(key);
+        }
+      }
     }
     return body;
   }

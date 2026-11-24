@@ -6,6 +6,8 @@
 // пространству {IP × port × protocol × SNI × AWG-параметры}; «что пролезет»
 // решает сеть/DPI.
 
+import '../awg_profile.dart';
+
 /// Транспорт кандидата. AWG = WireGuard + AmneziaWG-обфускация (голый WG DPI
 /// режет вернее, поэтому WG-вариант посева всегда обфусцированный — но при этом
 /// равноправный, без привилегии).
@@ -27,12 +29,14 @@ class AwgParams {
     required this.jc,
     required this.jmin,
     required this.jmax,
+    this.profile = AwgProfile.warp15,
   });
 
   final String ip;
   final int jc;
   final int jmin;
   final int jmax;
+  final AwgProfile profile;
 }
 
 /// Одна случайная конфигурация — описывает узел, который надо собрать (через
@@ -54,7 +58,8 @@ class ScanCandidate {
   final String sni;
   final AwgParams? awgParams;
 
-  ScanCandidate copyWith({ScanProtocol? protocol, String? sni}) => ScanCandidate(
+  ScanCandidate copyWith({ScanProtocol? protocol, String? sni}) =>
+      ScanCandidate(
         ip: ip,
         port: port,
         protocol: protocol ?? this.protocol,
@@ -71,6 +76,7 @@ class ScanCandidate {
   ///   MASQUE → `🔥🎭 WARP MASQUE (h3: cloudflare.com)`
   String get nodeTitle => switch (protocol) {
         ScanProtocol.awg => '🔥⛈️ WARP AWG '
+            '${awgParams?.profile == AwgProfile.warpCps ? 'CPS ' : ''}'
             '(${awgParams?.ip ?? 'quic'}${sni.isEmpty ? '' : ' $sni'})',
         ScanProtocol.masqueH3 =>
           '🔥🎭 WARP MASQUE (h3${sni.isEmpty ? '' : ': $sni'})',
@@ -107,8 +113,8 @@ class ScanEndpointStatus {
   final String colo;
   final String detail;
 
-  bool get alive => verdict == 'alive' || verdict == 'cookie' ||
-      verdict == 'geo-ok';
+  bool get alive =>
+      verdict == 'alive' || verdict == 'cookie' || verdict == 'geo-ok';
 
   ScanEndpointStatus copyWith({
     int? phase,

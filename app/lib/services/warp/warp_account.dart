@@ -1,5 +1,6 @@
 import '../../models/node_spec.dart' show Awg;
 import '../parser/uri_utils.dart' show parseReserved;
+import 'awg_profile.dart';
 
 /// §025 — закешированный Cloudflare WARP-аккаунт.
 ///
@@ -82,9 +83,16 @@ class WarpAccount {
   /// §137 — тег WARP-узла с эмодзи внутри. Облако ☁️ для plain, гроза ⛈️ для
   /// AWG-обфускации (визуальный сигнал «маскируется от DPI»). `+` для WARP+.
   /// Коллизия-суффикс (` 2`/` 3`) накидывает caller (контроллер знает соседей).
-  static String nodeTag({required bool warpPlus, required bool hasAwg}) {
+  static String nodeTag({
+    required bool warpPlus,
+    required bool hasAwg,
+    AwgProfile profile = AwgProfile.warp15,
+  }) {
     final plus = warpPlus ? '+' : '';
-    return hasAwg ? '🔥⛈️ WARP$plus (AWG 1.5)' : '🔥☁️ WARP$plus';
+    if (!hasAwg) return '🔥☁️ WARP$plus';
+    return profile == AwgProfile.warpCps
+        ? '🔥⛈️ WARP$plus (CPS)'
+        : '🔥⛈️ WARP$plus (AWG 1.5)';
   }
 
   /// `reserved` как 3 байта (из base64 client_id). null если client_id битый.
@@ -128,7 +136,8 @@ class WarpAccount {
   /// простое (без него UDP-маппинг оператора закрывается за 30–120с → пинг в
   /// err). `null`/`<=0` = не писать keepalive (дефолт: как раньше; генератор
   /// §284 идёт этим путём). Ручная регистрация подставляет 25 из Advanced.
-  String toWireguardUri({bool includeReserved = true, int? persistentKeepalive}) {
+  String toWireguardUri(
+      {bool includeReserved = true, int? persistentKeepalive}) {
     final res = includeReserved ? reserved : null;
     final addrs = [clientV4, if (clientV6.isNotEmpty) clientV6].join(',');
     // §137 — тег с эмодзи (plain = облако). Коллизию контроллер чинит ре-тегом.
@@ -164,12 +173,19 @@ class WarpAccount {
   /// §304 — [persistentKeepalive] (секунды) в `[Peer]` держит NAT-маппинг/сессию
   /// живыми при простое. `null`/`<=0` = не писать (дефолт; генератор §284 идёт
   /// без keepalive). Ручная регистрация подставляет 25 из Advanced.
-  String toWireguardConf({bool includeReserved = true, int? persistentKeepalive}) {
+  String toWireguardConf({
+    bool includeReserved = true,
+    int? persistentKeepalive,
+    AwgProfile profile = AwgProfile.warp15,
+  }) {
     final res = includeReserved ? reserved : null;
     final tag = warpPlus ? 'WARP+' : 'WARP';
+    final obfuscation = profile == AwgProfile.warpCps
+        ? 'CPS obfuscation'
+        : 'Amnezia 1.5 obfuscation';
     final addrs = [clientV4, if (clientV6.isNotEmpty) clientV6].join(', ');
     final b = StringBuffer()
-      ..writeln('# $tag (Amnezia 1.5 obfuscation)')
+      ..writeln('# $tag ($obfuscation)')
       ..writeln('[Interface]')
       ..writeln('PrivateKey = $privKey')
       ..writeln('Address = $addrs')

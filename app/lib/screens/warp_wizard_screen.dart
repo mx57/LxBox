@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../controllers/subscription_controller.dart';
 import '../services/ui_helpers.dart';
+import '../services/warp/awg_profile.dart';
 import '../services/warp/masquerade_params.dart';
 import '../services/warp/warp_account.dart';
 import '../services/warp/masque_account.dart';
@@ -16,8 +17,6 @@ import 'folder_detail_screen.dart';
 import 'warp_experiment_screen.dart';
 import '../services/l10n/locale_controller.dart';
 import '../widgets/safe_bottom.dart';
-import '../widgets/masquerade_fields.dart';
-import '../services/wireguard/masquerade_source.dart';
 
 /// §025 — Full-screen визард «Get WARP». Открывается из overflow-меню
 /// Subscriptions. Один тап «Register» для free; license/endpoint опциональны
@@ -86,6 +85,7 @@ class _WarpWizardScreenState extends State<WarpWizardScreen> with SnackHelper {
 
   // §126/§136 — AmneziaWG обфускация (default off — обычный WARP).
   bool _obfuscate = false;
+  AwgProfile _awgProfile = AwgProfile.warp15;
   // §142 — reserved (client_id): null = дефолт по галке (обфускация → off).
   // Юзер может переопределить чекбоксом в Advanced.
   bool? _includeReserved;
@@ -250,6 +250,7 @@ class _WarpWizardScreenState extends State<WarpWizardScreen> with SnackHelper {
         _endpoint.text = WarpAccount.defaultEndpoint;
       }
       _includeReserved = null; // §142 — вернуть к дефолту по галке
+      _awgProfile = AwgProfile.warp15;
       _sni.text = _picker?.randomSni() ?? ''; // свежий случайный домен
       _masqIp = 'quic'; // §143
       _masqIb = 'chrome';
@@ -293,6 +294,7 @@ class _WarpWizardScreenState extends State<WarpWizardScreen> with SnackHelper {
       folderIdx = await widget.subController.generateWarp(
         seedCount: _seedCount(),
         poolOverride: pool,
+        awgProfile: _awgProfile,
       );
     } catch (e) {
       if (mounted) {
@@ -332,7 +334,8 @@ class _WarpWizardScreenState extends State<WarpWizardScreen> with SnackHelper {
     if (_picker?.scan == null || _busy) return;
 
     // §305 — параметры эксперимента (число нод + JSON-пул) на отдельном экране.
-    final exp = await Navigator.of(context).push<({int count, ScanPool pool})>(
+    final exp = await Navigator.of(context)
+        .push<({int count, ScanPool pool, AwgProfile awgProfile})>(
       MaterialPageRoute(builder: (_) => const WarpExperimentScreen()),
     );
     if (exp == null || !mounted) return;
@@ -343,6 +346,7 @@ class _WarpWizardScreenState extends State<WarpWizardScreen> with SnackHelper {
       folderIdx = await widget.subController.generateWarp(
         seedCount: exp.count,
         poolOverride: exp.pool,
+        awgProfile: exp.awgProfile,
       );
     } catch (e) {
       if (mounted) {
@@ -417,6 +421,7 @@ class _WarpWizardScreenState extends State<WarpWizardScreen> with SnackHelper {
         endpoint: endpoint,
         forceNew: _forceNew,
         obfuscate: _obfuscate,
+        awgProfile: _awgProfile,
         quicParams: _buildQuicParams(),
         includeReserved: _includeReserved,
         // §304 — пусто/битое → null (keepalive не пишется); 0 явно выключает.
@@ -932,7 +937,9 @@ class _WarpWizardScreenState extends State<WarpWizardScreen> with SnackHelper {
                             getLocalText.s(
                               "WARP+ adds Argo Smart Routing (lower latency). Privacy is the same as free. Leave empty for free WARP.",
                             ),
-                            style: Theme.of(context).textTheme.bodySmall
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
                                 ?.copyWith(color: cs.onSurfaceVariant),
                           ),
                           const SizedBox(height: 12),
@@ -979,7 +986,9 @@ class _WarpWizardScreenState extends State<WarpWizardScreen> with SnackHelper {
                             getLocalText.s(
                               "host:port of the Cloudflare peer. With obfuscation a random working IP:port is filled in — tap the dice to reroll, or type your own to pin a specific one.",
                             ),
-                            style: Theme.of(context).textTheme.bodySmall
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
                                 ?.copyWith(color: cs.onSurfaceVariant),
                           ),
                           // §304 — persistent keepalive. Держит туннель живым при
@@ -998,7 +1007,9 @@ class _WarpWizardScreenState extends State<WarpWizardScreen> with SnackHelper {
                             getLocalText.s(
                               "Keeps the tunnel alive while idle so it doesn't rot to timeouts (default 25). 0 = off.",
                             ),
-                            style: Theme.of(context).textTheme.bodySmall
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
                                 ?.copyWith(color: cs.onSurfaceVariant),
                           ),
                           // §142 — reserved (client_id) опция. Дефолт по галке:
@@ -1020,6 +1031,44 @@ class _WarpWizardScreenState extends State<WarpWizardScreen> with SnackHelper {
                           ),
                           // §143 — masquerade id/ip/ib (ядро 009 генерит i1).
                           if (_obfuscate) ...[
+                            const SizedBox(height: 8),
+                            DropdownButtonFormField<AwgProfile>(
+                              initialValue: _awgProfile,
+                              isDense: true,
+                              decoration: InputDecoration(
+                                labelText: getLocalText.s("AWG profile"),
+                                border: const OutlineInputBorder(),
+                              ),
+                              items: [
+                                for (final p in AwgProfile.values)
+                                  DropdownMenuItem(
+                                    value: p,
+                                    child: Text(
+                                      p == AwgProfile.warpCps
+                                          ? getLocalText.s(
+                                              "WARP CPS (experimental)",
+                                            )
+                                          : getLocalText.s("WARP 1.5"),
+                                    ),
+                                  ),
+                              ],
+                              onChanged: _busy
+                                  ? null
+                                  : (v) => setState(
+                                        () => _awgProfile =
+                                            v ?? AwgProfile.warp15,
+                                      ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              getLocalText.s(
+                                "CPS adds extra client-side junk packets while keeping the standard WireGuard handshake. It is experimental and needs device testing.",
+                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: cs.onSurfaceVariant),
+                            ),
                             const SizedBox(height: 16),
                             // ip — протокол маскировки.
                             Row(
@@ -1083,7 +1132,9 @@ class _WarpWizardScreenState extends State<WarpWizardScreen> with SnackHelper {
                                   : getLocalText.s(
                                       "QUIC/STUN decoy carries no hostname — the domain below is cosmetic for this protocol.",
                                     ),
-                              style: Theme.of(context).textTheme.bodySmall
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
                                   ?.copyWith(color: cs.onSurfaceVariant),
                             ),
                             const SizedBox(height: 12),
@@ -1236,7 +1287,8 @@ class _WarpWizardScreenState extends State<WarpWizardScreen> with SnackHelper {
     hintText: hint,
     border: const OutlineInputBorder(),
     isDense: true,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
   );
 
   /// §136 — компактное числовое поле для Jc/Jmin/Jmax.
@@ -1249,7 +1301,8 @@ class _WarpWizardScreenState extends State<WarpWizardScreen> with SnackHelper {
       labelText: label,
       border: const OutlineInputBorder(),
       isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
     ),
   );
 }

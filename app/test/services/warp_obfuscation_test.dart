@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lxbox/models/node_spec.dart';
 import 'package:lxbox/services/parser/ini_parser.dart';
+import 'package:lxbox/services/warp/awg_profile.dart';
 import 'package:lxbox/services/warp/masquerade_params.dart';
 import 'package:lxbox/services/warp/warp_account.dart';
 import 'package:lxbox/services/warp/warp_client.dart';
@@ -33,7 +34,8 @@ void main() {
       );
 
   group('WarpClient — preset (§126/§136)', () {
-    test('preset: s1=s2=0, h1..h4=1,2,3,4, jc=4 (handshake остаётся plain WG)',
+    test(
+      'preset: s1=s2=0, h1..h4=1,2,3,4, jc=4 (handshake остаётся plain WG)',
         () {
       final p = WarpClient.amneziaPreset();
       expect(p['s1'], 0);
@@ -46,7 +48,8 @@ void main() {
       expect(p['jmin'], 40);
       expect(p['jmax'], 70);
       expect(p.containsKey('i1'), isFalse); // i1 генерится отдельно
-    });
+      },
+    );
 
     test('§136 preset с кастомными jc/jmin/jmax', () {
       final p = WarpClient.amneziaPreset(jc: 120, jmin: 23, jmax: 911);
@@ -59,7 +62,8 @@ void main() {
 
     test('§143 buildAmneziaAwg(quic): id/ip/ib, БЕЗ i1', () {
       final awg = WarpClient.buildAmneziaAwg(
-          const QuicParams(sni: 'www.google.com', ip: 'quic', ib: 'firefox'));
+        const QuicParams(sni: 'www.google.com', ip: 'quic', ib: 'firefox'),
+      );
       expect(awg.fields['jc'], 4);
       expect(awg.fields['ip'], 'quic');
       expect(awg.fields['id'], 'www.google.com');
@@ -70,16 +74,70 @@ void main() {
 
     test('§143 buildAmneziaAwg(dns): ip=dns, id; ib НЕ пишется', () {
       final awg = WarpClient.buildAmneziaAwg(
-          const QuicParams(sni: 'ozon.ru', ip: 'dns'));
+        const QuicParams(sni: 'ozon.ru', ip: 'dns'),
+      );
       expect(awg.fields['ip'], 'dns');
       expect(awg.fields['id'], 'ozon.ru');
       expect(awg.fields.containsKey('ib'), isFalse); // ib только для quic
       expect(awg.fields.containsKey('i1'), isFalse);
     });
 
+    test(
+      '§740 warpCps добавляет I2..I5, не меняя handshake и не конфликтуя с id/ip/ib',
+      () {
+        final awg = WarpClient.buildAmneziaAwg(
+          const QuicParams(
+            sni: 'ozon.ru',
+            ip: 'quic',
+            jc: 4,
+            jmin: 40,
+            jmax: 70,
+          ),
+          profile: AwgProfile.warpCps,
+        );
+        expect(awg.fields['s1'], 0);
+        expect(awg.fields['s2'], 0);
+        expect(awg.fields['h1'], 1);
+        expect(awg.fields['h4'], 4);
+        expect(awg.fields.containsKey('i1'), isFalse);
+        expect(awg.fields['ip'], 'quic');
+        expect(awg.fields['id'], 'ozon.ru');
+        expect(awg.fields['i2'], '<t><r 28>');
+        expect(awg.fields['i3'], '<r 32>');
+        expect(awg.fields['i4'], '<r 32>');
+        expect(awg.fields['i5'], '<r 32>');
+
+        final conf = account(
+          awg: awg,
+        ).toWireguardConf(profile: AwgProfile.warpCps);
+        expect(conf, startsWith('# WARP (CPS obfuscation)'));
+        expect(
+          WarpAccount.nodeTag(
+            warpPlus: false,
+            hasAwg: true,
+            profile: AwgProfile.warpCps,
+          ),
+          '🔥⛈️ WARP (CPS)',
+        );
+        final spec = parseWireguardIni(conf);
+        expect(spec?.awg?.fields['i2'], '<t><r 28>');
+        expect(
+          WarpAccount.fromJson(account(awg: awg).toJson())?.awg?.fields['i5'],
+          '<r 32>',
+        );
+      },
+    );
+
+    test('§740 неизвестный профиль мигрирует в warp15', () {
+      expect(AwgProfile.fromWire(null), AwgProfile.warp15);
+      expect(AwgProfile.fromWire('awg3'), AwgProfile.warp15);
+      expect(AwgProfile.fromWire('warp-cps'), AwgProfile.warpCps);
+    });
+
     test('§143 buildAmneziaAwg: пустой id → дефолтный домен; jc/jmin/jmax', () {
       final awg = WarpClient.buildAmneziaAwg(
-          const QuicParams(sni: '', ip: 'quic', jc: 7, jmin: 10, jmax: 20));
+        const QuicParams(sni: '', ip: 'quic', jc: 7, jmin: 10, jmax: 20),
+      );
       expect(awg.fields['id'], 'www.google.com'); // fallback
       expect(awg.fields['jc'], 7);
       expect(awg.fields['jmin'], 10);
@@ -94,8 +152,10 @@ void main() {
       expect(conf.contains('[Peer]'), isTrue);
       expect(
           conf.contains(
-              'PrivateKey = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaA='),
-          isTrue);
+          'PrivateKey = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaA=',
+        ),
+        isTrue,
+      );
       expect(conf.contains('Reserved = 1,2,3'), isTrue);
       expect(conf.contains('MTU = 1280'), isTrue);
       expect(conf.contains('Jc'), isFalse);
@@ -103,7 +163,8 @@ void main() {
 
     test('§143 obfuscated: AWG-поля + id/ip/ib в [Interface], БЕЗ I1', () {
       final awg = WarpClient.buildAmneziaAwg(
-          const QuicParams(sni: 'ozon.ru', ip: 'quic'));
+        const QuicParams(sni: 'ozon.ru', ip: 'quic'),
+      );
       final conf = account(awg: awg).toWireguardConf();
       expect(conf.contains('JC = 4'), isTrue);
       expect(conf.contains('H1 = 1'), isTrue);
@@ -114,10 +175,14 @@ void main() {
 
     test('§142 includeReserved=false → НЕТ Reserved (conf и uri)', () {
       final acc = account();
-      expect(acc.toWireguardConf(includeReserved: false).contains('Reserved'),
-          isFalse);
-      expect(acc.toWireguardUri(includeReserved: false).contains('reserved'),
-          isFalse);
+      expect(
+        acc.toWireguardConf(includeReserved: false).contains('Reserved'),
+        isFalse,
+      );
+      expect(
+        acc.toWireguardUri(includeReserved: false).contains('reserved'),
+        isFalse,
+      );
       // дефолт (true) — reserved есть (backward-compat).
       expect(acc.toWireguardConf().contains('Reserved = 1,2,3'), isTrue);
       expect(acc.toWireguardUri().contains('reserved'), isTrue);
@@ -127,7 +192,8 @@ void main() {
   group('.conf → parseWireguardIni round-trip', () {
     test('§143 obfuscated: AWG + id/ip/ib + reserved доходят до spec', () {
       final awg = WarpClient.buildAmneziaAwg(
-          const QuicParams(sni: 'ozon.ru', ip: 'dns'));
+        const QuicParams(sni: 'ozon.ru', ip: 'dns'),
+      );
       final conf = account(awg: awg).toWireguardConf();
 
       final spec = parseWireguardIni(conf);
@@ -155,7 +221,8 @@ void main() {
   group('WarpAccount persist (storage JSON)', () {
     test('awg round-trips через toJson/fromJson (§143 id/ip/ib)', () {
       final awg = WarpClient.buildAmneziaAwg(
-          const QuicParams(sni: 'ozon.ru', ip: 'quic'));
+        const QuicParams(sni: 'ozon.ru', ip: 'quic'),
+      );
       final acc = account(awg: awg);
       final back = WarpAccount.fromJson(acc.toJson());
       expect(back, isNotNull);

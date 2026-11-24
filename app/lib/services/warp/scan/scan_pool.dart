@@ -180,11 +180,12 @@ class ScanPool {
   static ScanPool? fromEndpoints(List<String> endpoints, {ScanPool? base}) {
     if (endpoints.isEmpty) return null;
     final seen = <String>{};
-    final cidrs = <String>[
+    final hosts = <String>[
       for (final e in endpoints)
         if (seen.add(e.trim()) && e.trim().isNotEmpty)
-          '${e.trim().split(':').first}/32',
+          e.trim().split(':').first,
     ];
+    final cidrs = [for (final host in hosts) '$host/32'];
     if (cidrs.isEmpty) return null;
     return ScanPool(
       wgV4Cidr: cidrs,
@@ -197,10 +198,10 @@ class ScanPool {
       utlsFpPool:
           base?.utlsFpPool ?? const ['chrome', 'firefox', 'safari', 'edge'],
       wgKeepalive: base?.wgKeepalive ?? 0,
-      masqueHostsPreset: endpoints,
+      masqueHostsPreset: hosts,
       masqueRecommendedHost: base?.masqueRecommendedHost ?? '',
       masqueV4Cidr: cidrs,
-      masqueH3HostsExtra: endpoints.isNotEmpty ? endpoints : (base?.masqueH3HostsExtra ?? const []),
+      masqueH3HostsExtra: hosts,
       masqueH2Exclude: base?.masqueH2Exclude ?? const [],
       masquePortsH3: base?.masquePortsH3 ?? const [443, 4443, 8095],
       masquePortsH2: base?.masquePortsH2 ?? const [500, 4500, 8443],

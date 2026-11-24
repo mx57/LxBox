@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lxbox/services/evolution/genome.dart';
 import 'package:lxbox/services/evolution/pools.dart';
 import 'package:lxbox/services/evolution/settings.dart';
+import 'package:lxbox/services/warp/awg_profile.dart';
 
 /// §848 — настройки прогона: сериализация, производные величины и то, как
 /// настройки превращаются в домены мутаций.
@@ -27,6 +28,7 @@ void main() {
     targetCountry: 'de',
     countries: ['de', 'nl'],
     transports: {EvoTransport.masqueH2},
+    awgProfiles: {AwgProfile.warpCps},
     disabledLoci: {EvoLocus.mtu, EvoLocus.dns},
     useEda: false,
     allowFragment: false,
@@ -38,15 +40,30 @@ void main() {
 
   test('дефолты — в документированных границах', () {
     const s = EvolutionSettings();
-    expect(s.populationSize, inInclusiveRange(EvolutionSettings.minPopulation,
-        EvolutionSettings.maxPopulation));
-    expect(s.maxGenerations,
-        inInclusiveRange(EvolutionSettings.minGenerations,
-            EvolutionSettings.maxGenerationsLimit));
-    expect(s.maxRequests, inInclusiveRange(EvolutionSettings.minRequestBudget,
-        EvolutionSettings.maxRequestBudget));
+    expect(
+      s.populationSize,
+      inInclusiveRange(
+        EvolutionSettings.minPopulation,
+        EvolutionSettings.maxPopulation,
+      ),
+    );
+    expect(
+      s.maxGenerations,
+      inInclusiveRange(
+        EvolutionSettings.minGenerations,
+        EvolutionSettings.maxGenerationsLimit,
+      ),
+    );
+    expect(
+      s.maxRequests,
+      inInclusiveRange(
+        EvolutionSettings.minRequestBudget,
+        EvolutionSettings.maxRequestBudget,
+      ),
+    );
     expect(s.rungAttempts, isNotEmpty);
     expect(s.transports, EvoTransport.values.toSet());
+    expect(s.awgProfiles, {AwgProfile.warp15});
     expect(s.disabledLoci, isEmpty);
     expect(s.locusEnabled(EvoLocus.transport), isTrue);
   });
@@ -55,6 +72,7 @@ void main() {
     final back = EvolutionSettings.fromJson(custom.toJson());
     expect(back.toJson(), custom.toJson());
     expect(back.transports, {EvoTransport.masqueH2});
+    expect(back.awgProfiles, {AwgProfile.warpCps});
     expect(back.disabledLoci, {EvoLocus.mtu, EvoLocus.dns});
     expect(back.locusEnabled(EvoLocus.mtu), isFalse);
     expect(back.useEda, isFalse);
@@ -68,12 +86,27 @@ void main() {
     // Дефолт бюджета = полный прогон по дефолтам с худшим множителем на вердикт
     // (проба чередует 3 источника гео, §844) — иначе потолок режет кампанию.
     expect(empty.maxRequests, 1080);
-    expect(empty.transports, EvoTransport.values.toSet(),
-        reason: 'пустышка транспортов = запрет поиска, берём все');
-    expect(EvolutionSettings.fromJson(const {'rungAttempts': [0, -1, 2]}).rungAttempts, [2]);
+    expect(
+      empty.transports,
+      EvoTransport.values.toSet(),
+      reason: 'пустышка транспортов = запрет поиска, берём все',
+    );
+    expect(
+        empty.awgProfiles,
+        {
+          AwgProfile.warp15,
+        },
+        reason: 'старые настройки остаются на проверенном профиле');
+    expect(
+      EvolutionSettings.fromJson(const {
+        'rungAttempts': [0, -1, 2],
+      }).rungAttempts,
+      [2],
+    );
     expect(
         EvolutionSettings.fromJson(const {'maxRequests': 'oops'}).maxRequests,
-        1080);
+      1080,
+    );
   });
 
   group('производные величины', () {
@@ -87,11 +120,25 @@ void main() {
       expect(const EvolutionSettings(rungKeepFraction: 0.9).keepOf(10), 9);
     });
 
-    test('eliteSize не опускается ниже двух — UMDA без пары родителей мертва',
+    test(
+      'eliteSize не опускается ниже двух — UMDA без пары родителей мертва',
         () {
-      expect(const EvolutionSettings(populationSize: 6, eliteFraction: 0.05).eliteSize, 2);
-      expect(const EvolutionSettings(populationSize: 16, eliteFraction: 0.35).eliteSize, 6);
-    });
+        expect(
+          const EvolutionSettings(
+            populationSize: 6,
+            eliteFraction: 0.05,
+          ).eliteSize,
+          2,
+        );
+        expect(
+          const EvolutionSettings(
+            populationSize: 16,
+            eliteFraction: 0.35,
+          ).eliteSize,
+          6,
+        );
+      },
+    );
 
     test('budgetLeft считает до потолка включительно', () {
       const s = EvolutionSettings(maxRequests: 100);
@@ -105,23 +152,36 @@ void main() {
       // seed=0 берёт время с часов — два вызова подряд попадают в один тик,
       // поэтому сравнивать между собой его нельзя; проверяем только расхождение
       // явных seed'ов (именно это нужно для «почему вчера было лучше»).
-      expect(const EvolutionSettings(seed: 777).rng().nextDouble(),
-          isNot(const EvolutionSettings(seed: 778).rng().nextDouble()));
-      expect(const EvolutionSettings(seed: 0).rng().nextDouble(), inInclusiveRange(0, 1));
+      expect(
+        const EvolutionSettings(seed: 777).rng().nextDouble(),
+        isNot(const EvolutionSettings(seed: 778).rng().nextDouble()),
+      );
+      expect(
+        const EvolutionSettings(seed: 0).rng().nextDouble(),
+        inInclusiveRange(0, 1),
+      );
     });
   });
 
   group('poolsFor', () {
     test('настройки ограничивают домен transport', () {
       final p = const EvolutionSettings(
-              transports: {EvoTransport.masqueH2}).poolsFor(pool);
+        transports: {EvoTransport.masqueH2},
+      ).poolsFor(pool);
       expect(p.alleles(EvoLocus.transport).values, ['h2']);
+    });
+
+    test('выбранный профиль AWG ограничивает домен', () {
+      final p = const EvolutionSettings(
+        awgProfiles: {AwgProfile.warpCps},
+      ).poolsFor(pool);
+      expect(p.alleles(EvoLocus.awgProfile).values, ['warp-cps']);
     });
 
     test('замороженные локусы теряют домен', () {
       final p = const EvolutionSettings(
-              disabledLoci: {EvoLocus.mtu, EvoLocus.endpoint})
-          .poolsFor(pool);
+        disabledLoci: {EvoLocus.mtu, EvoLocus.endpoint},
+      ).poolsFor(pool);
       expect(p.alleles(EvoLocus.mtu).isEmpty, isTrue);
       expect(p.alleles(EvoLocus.endpoint).isEmpty, isTrue);
       expect(p.alleles(EvoLocus.port).isEmpty, isFalse);
@@ -129,8 +189,9 @@ void main() {
 
     test('запрет фрагментации снимает её из домена и из посевной особи', () {
       final p = const EvolutionSettings(
-              allowFragment: false, allowRecordFragment: false)
-          .poolsFor(pool);
+        allowFragment: false,
+        allowRecordFragment: false,
+      ).poolsFor(pool);
       expect(p.alleles(EvoLocus.fragment).values, ['0']);
       final g = p.random(Random(0));
       expect(g.fragment, isFalse);
@@ -144,9 +205,12 @@ void main() {
           'de': ['2.2.2.2'],
         },
       );
-      final p = const EvolutionSettings(countries: ['de']).poolsFor(withCountries);
-      expect(p.alleles(EvoLocus.endpoint, countries: const ['de']).values,
-          ['2.2.2.2']);
+      final p = const EvolutionSettings(
+        countries: ['de'],
+      ).poolsFor(withCountries);
+      expect(p.alleles(EvoLocus.endpoint, countries: const ['de']).values, [
+        '2.2.2.2',
+      ]);
     });
   });
 }

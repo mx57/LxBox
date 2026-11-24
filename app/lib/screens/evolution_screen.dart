@@ -1,7 +1,7 @@
 // §848 — экран эволюции конфигов.
 //
 // Что здесь происходит физически: посев берётся из узлов экрана серверов
-// (проходимые WARP-конфиги), движок мутирует 16 локусов и оценивает каждого
+// (проходимые WARP-конфиги), движок мутирует категориальные локусы и оценивает каждого
 // кандидата живыми HTTP-пробами через поднятую probe-сессию ядра. Экран поэтому
 // и показывает ВСЮ цену: бюджет измеряется в запросах, а не в «прогрессе».
 //
@@ -42,6 +42,7 @@ import '../services/l10n/locale_controller.dart';
 import '../services/settings_storage.dart';
 import '../services/ui_helpers.dart';
 import '../services/usage_region.dart';
+import '../services/warp/awg_profile.dart';
 import '../services/warp/scan/endpoint_scanner.dart' show countryName;
 import '../services/warp/scan/scan_log.dart';
 import '../services/warp/scan/scan_pool.dart';
@@ -178,6 +179,7 @@ class _EvolutionScreenState extends State<EvolutionScreen>
       _assetPool,
       dnsTags: [for (final d in _dnsRefs.where((d) => d.enabled)) d.tag],
       endpointsByCountry: byCountry,
+      awgProfiles: _settings.awgProfiles,
     );
   }
 
@@ -1730,6 +1732,7 @@ String _displayValue(EvoLocus locus, String raw) => switch (locus) {
 /// Ключ l10n для подписи локуса (UI-тексты живут в словарях, сервис — нет).
 String locusUiKey(EvoLocus locus) => switch (locus) {
       EvoLocus.transport => "Transport",
+      EvoLocus.awgProfile => "AWG profile",
       EvoLocus.endpoint => "Endpoint",
       EvoLocus.port => "Port",
       EvoLocus.sni => "SNI domain",
@@ -1977,6 +1980,20 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                               EvoTransport.values.firstWhere((t) => t.wire == w),
                           },
                         ))),
+                _chips(cs,
+                    label: getLocalText.s("AWG profiles"),
+                    all: [for (final p in AwgProfile.values) p.wire],
+                    selected: {for (final p in _s.awgProfiles) p.wire},
+                    captions: const {
+                      'warp15': 'WARP 1.5',
+                      'warp-cps': 'WARP CPS',
+                    },
+                    onSelected: (set) => _patch(
+                        (s) => s.copyWith(
+                              awgProfiles: {
+                                for (final w in set) AwgProfile.fromWire(w),
+                              },
+                            ))),
                 _switch(cs,
                     label: getLocalText.s("TLS fragmentation"),
                     value: _s.allowFragment,
