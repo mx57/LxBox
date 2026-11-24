@@ -4,6 +4,7 @@
 
 import 'dart:math';
 
+import '../awg_profile.dart';
 import 'scan_models.dart';
 import 'scan_pool.dart';
 
@@ -12,16 +13,19 @@ class CandidateGenerator {
     this._pool, {
     Random? rng,
     double empiricalPortRatio = 0.3,
+    AwgProfile awgProfile = AwgProfile.warp15,
     // §305 — v6-endpoint генерим ТОЛЬКО если в системе включён IPv6
     // (`ipv6_enabled`). Иначе v6-нода мёртва (нет маршрута). Дефолт false.
     bool allowV6 = false,
   })  : _rng = rng ?? Random.secure(),
         _empiricalRatio = empiricalPortRatio,
+        _awgProfile = awgProfile,
         _allowV6 = allowV6;
 
   final ScanPool _pool;
   final Random _rng;
   final bool _allowV6;
+  final AwgProfile _awgProfile;
 
   /// Доля проб на empirical-порт (§132: достоверны только 2408/500/1701/4500).
   final double _empiricalRatio;
@@ -60,6 +64,7 @@ class CandidateGenerator {
         jc: 4,
         jmin: 40,
         jmax: 70,
+        profile: _awgProfile,
       );
 
   ScanCandidate _masqueCandidate(ScanProtocol proto) {
@@ -106,8 +111,8 @@ class CandidateGenerator {
       ];
 
   int _pickWgPort() {
-    final useExtra = _pool.wgPortsExtra.isNotEmpty &&
-        _rng.nextDouble() < _empiricalRatio;
+    final useExtra =
+        _pool.wgPortsExtra.isNotEmpty && _rng.nextDouble() < _empiricalRatio;
     final ports = useExtra ? _pool.wgPortsExtra : _pool.wgPorts;
     return _pick(ports);
   }

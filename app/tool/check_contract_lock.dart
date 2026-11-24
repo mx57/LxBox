@@ -203,7 +203,9 @@ String _treeHash(Directory dir) {
       .whereType<File>()
       .map((f) => f.path)
       .toList()
-    ..sort(); // байтовый порядок, как LC_ALL=C sort
+    ..sort((a, b) => a
+        .replaceAll('\\', '/')
+        .compareTo(b.replaceAll('\\', '/'))); // байтовый порядок, как LC_ALL=C sort
 
   // Склеиваем содержимое ровно так, как это делает `xargs cat`. Файлы
   // контракта — текстовые и мелкие (единицы мегабайт на всё дерево), поэтому

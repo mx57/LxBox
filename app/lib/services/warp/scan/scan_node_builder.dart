@@ -8,6 +8,7 @@
 // `nameHint` парсера, который кладёт его во фрагмент.
 
 import '../../parser/ini_parser.dart';
+import '../awg_profile.dart';
 import '../masque_account.dart';
 import '../masquerade_params.dart';
 import '../warp_account.dart';
@@ -44,13 +45,16 @@ class ScanNodeBuilder {
     final acc = warp;
     if (acc == null) return null;
     final p = c.awgParams;
-    final awg = WarpClient.buildAmneziaAwg(QuicParams(
+    final awg = WarpClient.buildAmneziaAwg(
+      QuicParams(
       sni: c.sni,
       ip: p?.ip ?? 'quic',
       jc: p?.jc ?? 4,
       jmin: p?.jmin ?? 40,
       jmax: p?.jmax ?? 70,
-    ));
+      ),
+      profile: p?.profile ?? AwgProfile.warp15,
+    );
     final tuned = acc.copyWith(endpoint: c.endpoint, awg: awg);
     // reserved опускаем: рабочие AWG-конфиги идут без client_id (§142).
     // §313 — keepalive из пула: без него пир молчит при простое, NAT-маппинг
@@ -59,6 +63,7 @@ class ScanNodeBuilder {
       tuned.toWireguardConf(
         includeReserved: false,
         persistentKeepalive: wgKeepalive,
+        profile: p?.profile ?? AwgProfile.warp15,
       ),
       nameHint: c.nodeTitle,
     );

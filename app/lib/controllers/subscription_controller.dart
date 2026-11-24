@@ -60,6 +60,7 @@ import '../services/subscription/node_budget.dart';
 import '../services/subscription/sources.dart';
 import '../services/subscription/subscription_identity.dart';
 import '../services/warp/masque_account.dart';
+import '../services/warp/awg_profile.dart';
 import '../services/warp/masquerade_params.dart';
 import '../services/warp/warp_account.dart';
 import '../services/warp/warp_client.dart';
@@ -613,6 +614,7 @@ class SubscriptionController extends ChangeNotifier {
     bool reuse = true,
     bool forceNew = false,
     bool obfuscate = false,
+    AwgProfile awgProfile = AwgProfile.warp15,
     QuicParams quicParams = const QuicParams(),
     // §142 — класть ли reserved (client_id). null → дефолт по галке: обфускация
     // ВКЛ → false (привязка к устройству режется), ВЫКЛ → true (§025).
@@ -681,7 +683,12 @@ class SubscriptionController extends ChangeNotifier {
       // §126 — обфускация чисто клиентская (не требует ре-регистрации в
       // Cloudflare). Если переиспользуем кеш, но галка/параметры сменились —
       // (пере)генерируем awg поверх существующего аккаунта; off → снимаем.
-      account = _syncWarpObfuscation(account, obfuscate, resolvedParams);
+      account = _syncWarpObfuscation(
+        account,
+        obfuscate,
+        resolvedParams,
+        awgProfile,
+      );
 
       await SettingsStorage.setWarpAccount(account);
 
@@ -689,7 +696,12 @@ class SubscriptionController extends ChangeNotifier {
       // юзер сам решает нужны ли дубли (разные endpoint/SNI/обфускация). Тег с
       // коллизия-суффиксом (` 2`/` 3`), эмодзи внутри тега (☁️ plain / ⛈️ AWG).
       final tag = _uniqueWarpTag(
-          WarpAccount.nodeTag(warpPlus: account.warpPlus, hasAwg: account.awg != null));
+        WarpAccount.nodeTag(
+          warpPlus: account.warpPlus,
+          hasAwg: account.awg != null,
+          profile: awgProfile,
+        ),
+      );
 
       // §142 — reserved (client_id): дефолт по галке. Обфускация → false
       // (привязка к устройству режется), plain → true (§025 своя регистрация).
@@ -698,8 +710,13 @@ class SubscriptionController extends ChangeNotifier {
       // §126 — обфусцированный узел добавляем через `.conf` (i1 ~1700b удобнее
       // провести INI-путём); plain WARP — короткий URI как раньше.
       if (account.awg != null) {
-        await _addWarpObfuscated(account, tag, withReserved,
-            persistentKeepalive: persistentKeepalive);
+        await _addWarpObfuscated(
+          account,
+          tag,
+          withReserved,
+          persistentKeepalive: persistentKeepalive,
+          profile: awgProfile,
+        );
       } else {
         await _addWarpPlain(account, tag, withReserved,
             persistentKeepalive: persistentKeepalive);
@@ -849,11 +866,17 @@ class SubscriptionController extends ChangeNotifier {
   /// (свежий register уже проставил — тогда no-op; кешированный аккаунт без
   /// awg или с awg — перегенерируем, чтобы применить актуальный шаблон).
   WarpAccount _syncWarpObfuscation(
-      WarpAccount account, bool obfuscate, QuicParams quicParams) {
+    WarpAccount account,
+    bool obfuscate,
+    QuicParams quicParams,
+    AwgProfile awgProfile,
+  ) {
     if (!obfuscate) {
       return account.awg == null ? account : account.copyWith(clearAwg: true);
     }
-    return account.copyWith(awg: WarpClient.buildAmneziaAwg(quicParams));
+    return account.copyWith(
+      awg: WarpClient.buildAmneziaAwg(quicParams, profile: awgProfile),
+    );
   }
 
   /// §137 — базовый [base]-тег + суффикс ` 2`/` 3`/… если уже занят среди
@@ -875,11 +898,19 @@ class SubscriptionController extends ChangeNotifier {
   /// (несёт AWG; reserved по [includeReserved]). [tag] (с эмодзи ⛈️ +
   /// коллизия-суффикс) ставится принудительно (INI-путь иначе дал бы `WireGuard`).
   Future<void> _addWarpObfuscated(
-      WarpAccount account, String tag, bool includeReserved,
-      {int? persistentKeepalive}) async {
-    final spec = parseWireguardIni(account.toWireguardConf(
+    WarpAccount account,
+    String tag,
+    bool includeReserved, {
+    int? persistentKeepalive,
+    required AwgProfile profile,
+  }) async {
+    final spec = parseWireguardIni(
+      account.toWireguardConf(
         includeReserved: includeReserved,
-        persistentKeepalive: persistentKeepalive));
+        persistentKeepalive: persistentKeepalive,
+        profile: profile,
+      ),
+    );
     if (spec == null) {
       _lastError = const ErrMsg(ErrKey.invalidWarpConfigObfuscated);
       return;
@@ -1460,7 +1491,9 @@ class SubscriptionController extends ChangeNotifier {
       goneContainers: goneContainers,
     );
     for (var i = 0; i < _entries.length && i < r.lists.length; i++) {
-      if (!identical(r.lists[i], after[i])) _entries[i]._replaceList(r.lists[i]);
+      if (!identical(r.lists[i], after[i])) {
+        _entries[i]._replaceList(r.lists[i]);
+      }
     }
     if (r.cleared.chainsChanged || r.rewritten.chainsChanged) {
       await SettingsStorage.setChains(r.chains);
@@ -1886,6 +1919,8 @@ class SubscriptionController extends ChangeNotifier {
     WarpClient? client,
     // §305 — override пула из JSON-окна эксперимента. null → bundled asset.
     ScanPool? poolOverride,
+    // §740 — профиль WARP-декоя; старый вызов остаётся safe AWG 1.5.
+    AwgProfile awgProfile = AwgProfile.warp15,
     // §847 — DNS-резолверы, выбранные после скана (фаза 3). Пусто → ничего не
     // трогаем в настройках DNS.
     List<DnsServerResult> dnsSelected = const [],
@@ -1923,7 +1958,12 @@ class SubscriptionController extends ChangeNotifier {
     final allowV6 =
         (await SettingsStorage.getVar('ipv6_enabled', 'false')).toLowerCase() ==
             'true';
-    final gen = CandidateGenerator(pool, rng: rng, allowV6: allowV6);
+    final gen = CandidateGenerator(
+      pool,
+      rng: rng,
+      allowV6: allowV6,
+      awgProfile: awgProfile,
+    );
     final seedUris = _candidatesToUris(gen.seed(seedCount), builder);
     if (seedUris.isEmpty) return null;
     return _recreateScanFolder(seedUris);

@@ -2508,6 +2508,9 @@
         "conflicts": [
           {
             "with": "ip",
+            "when": {
+              "ip": "sip"
+            },
             "code": "field_conflict"
           }
         ],

@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lxbox/models/template_vars.dart';
+import 'package:lxbox/services/warp/awg_profile.dart';
 import 'package:lxbox/services/warp/masque_account.dart';
 import 'package:lxbox/services/warp/scan/candidate_generator.dart';
 import 'package:lxbox/services/warp/scan/scan_models.dart';
@@ -45,7 +46,11 @@ void main() {
         createdAt: '2026-01-01T00:00:00Z',
       );
 
-  ScanCandidate cand(ScanProtocol p, {String ip = '162.159.192.7', int port = 2408}) =>
+  ScanCandidate cand(
+    ScanProtocol p, {
+    String ip = '162.159.192.7',
+    int port = 2408,
+  }) =>
       ScanCandidate(ip: ip, port: port, protocol: p, sni: 'yandex.ru');
 
   test('AWG-узел несёт endpoint кандидата в .conf', () {
@@ -55,22 +60,59 @@ void main() {
     expect(uri, contains('162.159.192.7:2408'));
   });
 
+  test('§740 профиль кандидата проходит до эмита и заголовка узла', () {
+    final candidate = ScanCandidate(
+      ip: '162.159.192.7',
+      port: 2408,
+      protocol: ScanProtocol.awg,
+      sni: 'ya.ru',
+      awgParams: const AwgParams(
+        ip: 'quic',
+        jc: 4,
+        jmin: 40,
+        jmax: 70,
+        profile: AwgProfile.warpCps,
+      ),
+    );
+    final uri = ScanNodeBuilder(warp: warp()).uriFor(candidate)!;
+    final body = parseLinkAs<WireguardSpec>(uri)!.emit(TemplateVars.empty).map;
+    expect(body['i2'], '<t><r 28>', reason: 'uri=$uri\nbody=$body');
+    expect(body['i5'], '<r 32>');
+    expect(body['s1'], 0);
+    expect(body['h4'], 4);
+    expect(Uri.decodeComponent(uri), contains('WARP AWG CPS (quic ya.ru)'));
+  });
+
   test('§305 MASQUE h3 И h2 → IP:port кандидата (форсинг h3→server снят)', () {
     // Боевой тест (пинг через рабочий туннель) опроверг привязку h3 к серверу
     // реги: h3 живёт на чужих IP блока. Оба транспорта берут endpoint кандидата.
     final b = ScanNodeBuilder(masque: masque());
 
     final h3 = b.uriFor(
-        cand(ScanProtocol.masqueH3, ip: '162.159.199.5', port: 4443));
+      cand(ScanProtocol.masqueH3, ip: '162.159.199.5', port: 4443),
+    );
     expect(h3, isNotNull);
     expect(h3, startsWith('masque://'));
-    expect(h3, contains('162.159.199.5:4443'), reason: 'h3 — IP:port кандидата');
-    expect(h3, isNot(contains('162.159.198.1')), reason: 'НЕ server из аккаунта');
+    expect(
+      h3,
+      contains('162.159.199.5:4443'),
+      reason: 'h3 — IP:port кандидата',
+    );
+    expect(
+      h3,
+      isNot(contains('162.159.198.1')),
+      reason: 'НЕ server из аккаунта',
+    );
     expect(h3, contains('vhttp=h3'));
 
     final h2 = b.uriFor(
-        cand(ScanProtocol.masqueH2, ip: '162.159.198.5', port: 8443));
-    expect(h2, contains('162.159.198.5:8443'), reason: 'h2 — IP:port кандидата');
+      cand(ScanProtocol.masqueH2, ip: '162.159.198.5', port: 8443),
+    );
+    expect(
+      h2,
+      contains('162.159.198.5:8443'),
+      reason: 'h2 — IP:port кандидата',
+    );
     expect(h2, contains('vhttp=h2'));
   });
 
@@ -102,15 +144,19 @@ void main() {
       expect((peers.first as Map)['persistent_keepalive_interval'], 25);
     });
 
-    test('ключа нет в JSON (дефолт 0) → генерация цела, keepalive не пишется',
+    test(
+      'ключа нет в JSON (дефолт 0) → генерация цела, keepalive не пишется',
         () {
       final b = ScanNodeBuilder(warp: warp());
       final uri = b.uriFor(awgCand());
       expect(uri, isNotNull, reason: 'генерация не падает без keepalive');
       final peers = emitOf(uri!)['peers'] as List;
-      expect((peers.first as Map).containsKey('persistent_keepalive_interval'),
-          isFalse);
-    });
+        expect(
+          (peers.first as Map).containsKey('persistent_keepalive_interval'),
+          isFalse,
+        );
+      },
+    );
 
     test('keepalive=0 → не пишется (гейт > 0 в WarpAccount)', () {
       final b = ScanNodeBuilder(warp: warp(), wgKeepalive: 0);
@@ -139,7 +185,9 @@ void main() {
     final awgUri = Uri.decodeComponent(b.uriFor(awg)!);
     expect(awgUri, contains('WARP AWG (quic ya.ru)'));
 
-    final h3 = b.uriFor(cand(ScanProtocol.masqueH3, ip: '162.159.198.5', port: 443))!;
+    final h3 = b.uriFor(
+      cand(ScanProtocol.masqueH3, ip: '162.159.198.5', port: 443),
+    )!;
     expect(Uri.decodeComponent(h3), contains('WARP MASQUE (h3: yandex.ru)'));
   });
 
@@ -152,15 +200,30 @@ void main() {
       '188.114.96.7:443',
     ]);
     expect(pool, isNotNull);
-    final cands = CandidateGenerator(pool!, rng: Random(7))
-        .seed(120)
-        .where((c) => c.protocol.isMasque);
-    expect(cands, isNotEmpty,
-        reason: 'из endpoints-пула обязаны сеяться MASQUE');
+    final cands = CandidateGenerator(
+      pool!,
+      rng: Random(7),
+      awgProfile: AwgProfile.warpCps,
+    ).seed(120);
+    final awgCands = cands.where((c) => c.protocol == ScanProtocol.awg);
+    expect(awgCands, isNotEmpty);
+    expect(
+      awgCands.every((c) => c.awgParams?.profile == AwgProfile.warpCps),
+      isTrue,
+    );
+    final masqueCands = cands.where((c) => c.protocol.isMasque);
+    expect(
+      masqueCands,
+      isNotEmpty,
+      reason: 'из endpoints-пула обязаны сеяться MASQUE',
+    );
     final b = ScanNodeBuilder(masque: masque());
-    for (final c in cands) {
-      expect(c.ip, isNot(contains(':')),
-          reason: 'IP кандидата с портом: ${c.ip}');
+    for (final c in masqueCands) {
+      expect(
+        c.ip,
+        isNot(contains(':')),
+        reason: 'IP кандидата с портом: ${c.ip}',
+      );
       final uri = b.uriFor(c);
       expect(uri, isNotNull);
       expect(uri, contains('@${c.ip}:${c.port}?'));

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/l10n/locale_controller.dart';
+import '../services/warp/awg_profile.dart';
 import '../services/warp/scan/scan_pool.dart';
 import '../services/warp/warp_endpoint_picker.dart';
 import '../services/usage_region.dart';
@@ -11,7 +12,7 @@ import '../services/usage_region.dart';
 /// §305 — экран настройки WARP-эксперимента (генератор нод). Вынесен из попапа:
 /// JSON-пул большой, в диалоге тесно. Пользователь задаёт число нод и
 /// редактирует JSON пула (по умолчанию bundled asset), генератор рандомит по
-/// нему. Возвращает `(count, pool)` через `Navigator.pop` или null (отмена).
+/// нему. Возвращает `(count, pool, awgProfile)` через `Navigator.pop` или null (отмена).
 class WarpExperimentScreen extends StatefulWidget {
   const WarpExperimentScreen({super.key});
 
@@ -22,6 +23,7 @@ class WarpExperimentScreen extends StatefulWidget {
 class _WarpExperimentScreenState extends State<WarpExperimentScreen> {
   final _countCtl = TextEditingController(text: '20');
   final _jsonCtl = TextEditingController();
+  AwgProfile _awgProfile = AwgProfile.warp15;
   String? _error;
   bool _loading = true;
 
@@ -72,7 +74,7 @@ class _WarpExperimentScreenState extends State<WarpExperimentScreen> {
       return;
     }
     final count = (int.tryParse(_countCtl.text.trim()) ?? 20).clamp(1, 200);
-    Navigator.of(context).pop((count: count, pool: pool));
+    Navigator.of(context).pop((count: count, pool: pool, awgProfile: _awgProfile));
   }
 
   @override
@@ -115,6 +117,37 @@ class _WarpExperimentScreenState extends State<WarpExperimentScreen> {
                           helperText: getLocalText.s("1–200"),
                           border: const OutlineInputBorder(),
                         ),
+                      ),
+                      const SizedBox(height: 20),
+                      DropdownButtonFormField<AwgProfile>(
+                        initialValue: _awgProfile,
+                        decoration: InputDecoration(
+                          labelText: getLocalText.s("AWG profile"),
+                          border: const OutlineInputBorder(),
+                        ),
+                        items: [
+                          for (final p in AwgProfile.values)
+                            DropdownMenuItem(
+                              value: p,
+                              child: Text(
+                                p == AwgProfile.warpCps
+                                    ? getLocalText.s("WARP CPS (experimental)")
+                                    : getLocalText.s("WARP 1.5"),
+                              ),
+                            ),
+                        ],
+                        onChanged: (v) => setState(
+                          () => _awgProfile = v ?? AwgProfile.warp15,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        getLocalText.s(
+                          "Profile changes only AWG junk; MASQUE nodes are unaffected.",
+                        ),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
                       ),
                       const SizedBox(height: 20),
                       Text(

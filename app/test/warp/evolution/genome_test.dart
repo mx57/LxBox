@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lxbox/services/evolution/genome.dart';
+import 'package:lxbox/services/warp/awg_profile.dart';
 
 import '../../contract_paths.dart';
 
@@ -77,6 +78,7 @@ void main() {
       // мусор к умолчанию (`'zz-transport'` → awg), и ключ совпал бы с базовым.
       const alt = {
         'transport': 'h3',
+        'awgProfile': 'warp-cps',
         'endpoint': '9.9.9.9',
         'port': '8443',
         'sni': 'other.ru',
@@ -101,11 +103,24 @@ void main() {
 
     test('json → Genome — round-trip', () {
       expect(Genome.fromJson(awg.toJson()..remove('key')).key, awg.key);
+      expect(
+        Genome.fromJson(
+          awg.copyWith(awgProfile: AwgProfile.warpCps).toJson(),
+        ).awgProfile,
+        AwgProfile.warpCps,
+      );
+      expect(
+        Genome.fromJson(const {'transport': 'awg'}).awgProfile,
+        AwgProfile.warp15,
+      );
     });
 
     test('distanceTo — доля различающихся локусов', () {
       expect(awg.distanceTo(awg), 0);
-      expect(awg.distanceTo(awg.copyWith(port: 4500)), 1 / EvoLocus.values.length);
+      expect(
+        awg.distanceTo(awg.copyWith(port: 4500)),
+        1 / EvoLocus.values.length,
+      );
       expect(awg.distanceTo(h2), greaterThan(0.3));
     });
 
@@ -113,8 +128,10 @@ void main() {
       expect(awg.endpointHostPort, '162.159.192.7:500');
       expect(
         const Genome(
-                transport: EvoTransport.awg, endpoint: '2606:4700::1', port: 1701)
-            .endpointHostPort,
+          transport: EvoTransport.awg,
+          endpoint: '2606:4700::1',
+          port: 1701,
+        ).endpointHostPort,
         '[2606:4700::1]:1701',
       );
     });
@@ -139,8 +156,10 @@ void main() {
 
     test('keepalive=0 снимает ключ (ядро берёт своё)', () {
       final body = const Genome(
-              transport: EvoTransport.awg, endpoint: '1.1.1.1', port: 2408)
-          .applyTo(awgBody());
+        transport: EvoTransport.awg,
+        endpoint: '1.1.1.1',
+        port: 2408,
+      ).applyTo(awgBody());
       final peer = (body['peers'] as List).first as Map<String, dynamic>;
       expect(peer.containsKey('persistent_keepalive_interval'), isFalse);
       expect(body.containsKey('mtu'), isFalse, reason: 'mtu=0 → ключ не пишем');
@@ -153,14 +172,42 @@ void main() {
       expect(body['jmin'], 20);
       expect(body['jmax'], 128);
       expect(body['id'], 'mail.ru');
-      expect(body.containsKey('ib'), isFalse,
-          reason: 'ib осмыслен только при junkProto=quic');
+      expect(
+        body.containsKey('ib'),
+        isFalse,
+        reason: 'ib осмыслен только при junkProto=quic',
+      );
+    });
+
+    test('warpCps добавляет CPS-поля, warp15 их снимает', () {
+      final cps =
+          awg.copyWith(awgProfile: AwgProfile.warpCps).applyTo(awgBody());
+      expect(cps['i2'], '<t><r 28>');
+      expect(cps['i5'], '<r 32>');
+      expect(cps['s1'], awgBody()['s1']);
+      expect(cps['h4'], awgBody()['h4']);
+      final reverted = awg.applyTo(cps);
+      for (final key in const ['i2', 'i3', 'i4', 'i5']) {
+        expect(reverted.containsKey(key), isFalse);
+      }
+    });
+
+    test('профиль доходит до кандидата, MASQUE его игнорирует', () {
+      final cps = awg.copyWith(awgProfile: AwgProfile.warpCps);
+      expect(cps.toCandidate().awgParams?.profile, AwgProfile.warpCps);
+      expect(
+        h2.copyWith(awgProfile: AwgProfile.warpCps).toCandidate().awgParams,
+        isNull,
+      );
     });
 
     test('junkDomain пуст → приманка берёт sni', () {
-      final body =
-          const Genome(transport: EvoTransport.awg, endpoint: '1.1.1.1', port: 2408, sni: 'sni.ru')
-              .applyTo(awgBody());
+      final body = const Genome(
+        transport: EvoTransport.awg,
+        endpoint: '1.1.1.1',
+        port: 2408,
+        sni: 'sni.ru',
+      ).applyTo(awgBody());
       expect(body['id'], 'sni.ru');
     });
 
@@ -192,11 +239,16 @@ void main() {
 
     test('keepalive=0 снимает keep_alive_period', () {
       final body = const Genome(
-              transport: EvoTransport.masqueH3, endpoint: '1.1.1.1', port: 443)
-          .applyTo(masqueBody(tls: false));
+        transport: EvoTransport.masqueH3,
+        endpoint: '1.1.1.1',
+        port: 443,
+      ).applyTo(masqueBody(tls: false));
       expect(body.containsKey('keep_alive_period'), isFalse);
-      expect(body.containsKey('tls'), isFalse,
-          reason: 'пустой tls{} в тело не пишется');
+      expect(
+        body.containsKey('tls'),
+        isFalse,
+        reason: 'пустой tls{} в тело не пишется',
+      );
     });
 
     test('sni пуст → server_name удаляется, а не пишется пустым', () {
@@ -204,16 +256,22 @@ void main() {
           transport: EvoTransport.masqueH2,
           endpoint: '1.1.1.1',
           port: 8443,
-          fragment: true);
+        fragment: true,
+      );
       final tls = g.applyTo(masqueBody(vhttp: 'h2'))['tls'] as Map;
       expect(tls.containsKey('server_name'), isFalse);
       expect(tls['fragment'], true, reason: 'блок жив, просто без SNI');
 
       final noTls = const Genome(
-              transport: EvoTransport.masqueH3, endpoint: '1.1.1.1', port: 443)
-          .applyTo(masqueBody());
-      expect(noTls.containsKey('tls'), isFalse,
-          reason: 'пустой tls{} в тело не пишется');
+        transport: EvoTransport.masqueH3,
+        endpoint: '1.1.1.1',
+        port: 443,
+      ).applyTo(masqueBody());
+      expect(
+        noTls.containsKey('tls'),
+        isFalse,
+        reason: 'пустой tls{} в тело не пишется',
+      );
     });
 
     test('sniCase>0 даёт смешанный регистр детерминированно', () {
@@ -222,9 +280,12 @@ void main() {
           endpoint: '1.1.1.1',
           port: 8443,
           sni: 'www.wikipedia.org',
-          sniCase: 3);
-      final first = (g.applyTo(masqueBody(vhttp: 'h2'))['tls'] as Map)['server_name'];
-      final second = (g.applyTo(masqueBody(vhttp: 'h2'))['tls'] as Map)['server_name'];
+        sniCase: 3,
+      );
+      final first =
+          (g.applyTo(masqueBody(vhttp: 'h2'))['tls'] as Map)['server_name'];
+      final second =
+          (g.applyTo(masqueBody(vhttp: 'h2'))['tls'] as Map)['server_name'];
       expect(first, second, reason: 'fitness должен быть воспроизводим');
       expect('$first', isNot('www.wikipedia.org'));
       expect('$first'.toLowerCase(), 'www.wikipedia.org');
@@ -238,23 +299,28 @@ void main() {
 
       final h3 = h2.copyWith(transport: EvoTransport.masqueH3, port: 443);
       final h3Body = h3.applyTo(masqueBody())['tls'] as Map;
-      expect(h3Body.containsKey('fragment'), isFalse,
-          reason: 'masque_tls_fragment_h3: на h3 ядро флаг игнорирует');
+      expect(
+        h3Body.containsKey('fragment'),
+        isFalse,
+        reason: 'masque_tls_fragment_h3: на h3 ядро флаг игнорирует',
+      );
       expect(h3Body.containsKey('record_fragment'), isFalse);
       expect(h3Body.containsKey('fragment_fallback_delay'), isFalse);
     });
 
-    test('запрет мутации фрагментации (fragment=false) не оставляет ключей',
+    test(
+      'запрет мутации фрагментации (fragment=false) не оставляет ключей',
         () {
       final tls = const Genome(
               transport: EvoTransport.masqueH2,
               endpoint: '1.1.1.1',
               port: 8443,
-              sni: 'ex.org')
-          .applyTo(masqueBody(vhttp: 'h2'))['tls'] as Map;
+          sni: 'ex.org',
+        ).applyTo(masqueBody(vhttp: 'h2'))['tls'] as Map;
       expect(tls.containsKey('fragment'), isFalse);
       expect(tls['server_name'], 'ex.org');
-    });
+      },
+    );
   });
 
   group('caseShuffle', () {
@@ -263,14 +329,25 @@ void main() {
     });
 
     test('детерминирован по seed и сохраняет нижний регистр как set', () {
-      expect(caseShuffle('www.example.com', 7), caseShuffle('www.example.com', 7));
-      expect(caseShuffle('www.example.com', 7).toLowerCase(), 'www.example.com');
-      expect(caseShuffle('www.example.com', 7), isNot(caseShuffle('www.example.com', 8)));
+      expect(
+        caseShuffle('www.example.com', 7),
+        caseShuffle('www.example.com', 7),
+      );
+      expect(
+        caseShuffle('www.example.com', 7).toLowerCase(),
+        'www.example.com',
+      );
+      expect(
+        caseShuffle('www.example.com', 7),
+        isNot(caseShuffle('www.example.com', 8)),
+      );
     });
 
     test('punycode-метки не трогает (регистр там значим)', () {
-      expect(caseShuffle('xn--80ak6aa92e.com', 5).split('.').first,
-          'xn--80ak6aa92e');
+      expect(
+        caseShuffle('xn--80ak6aa92e.com', 5).split('.').first,
+        'xn--80ak6aa92e',
+      );
     });
   });
 }

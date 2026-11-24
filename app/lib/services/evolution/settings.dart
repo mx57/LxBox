@@ -13,6 +13,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import '../settings_storage.dart';
+import '../warp/awg_profile.dart';
 import 'genome.dart';
 import 'pools.dart';
 
@@ -36,6 +37,7 @@ class EvolutionSettings {
       EvoTransport.masqueH3,
       EvoTransport.masqueH2,
     },
+    this.awgProfiles = const {AwgProfile.warp15},
     this.disabledLoci = const {},
     this.useEda = true,
     this.allowFragment = true,
@@ -96,6 +98,9 @@ class EvolutionSettings {
   /// Какие транспорты участвуют в поиске.
   final Set<EvoTransport> transports;
 
+  /// Какие WARP-safe профили AWG участвуют в поиске.
+  final Set<AwgProfile> awgProfiles;
+
   /// Локусы, которые ЗАПРЕЩЕНО мутировать (пользователь фиксирует параметр).
   final Set<EvoLocus> disabledLoci;
 
@@ -117,15 +122,17 @@ class EvolutionSettings {
   /// Порог «проходимый» для статистики и архива (доля успешных проб).
   final double minPassRate;
 
-  Random rng() => Random(seed == 0 ? DateTime.now().microsecondsSinceEpoch : seed);
+  Random rng() =>
+      Random(seed == 0 ? DateTime.now().microsecondsSinceEpoch : seed);
 
   bool locusEnabled(EvoLocus l) => !disabledLoci.contains(l);
 
   int get eliteSize => max(2, (populationSize * eliteFraction).round());
 
   /// Кандидатов на следующий ранг.
-  int keepOf(int evaluated) =>
-      evaluated <= 2 ? evaluated : max(1, (evaluated * rungKeepFraction).round());
+  int keepOf(int evaluated) => evaluated <= 2
+      ? evaluated
+      : max(1, (evaluated * rungKeepFraction).round());
 
   /// Потолок поколений: либо по числу, либо по бюджету запросов.
   bool budgetLeft(int requestsUsed) => requestsUsed < maxRequests;
@@ -144,6 +151,7 @@ class EvolutionSettings {
     String? targetCountry,
     List<String>? countries,
     Set<EvoTransport>? transports,
+    Set<AwgProfile>? awgProfiles,
     Set<EvoLocus>? disabledLoci,
     bool? useEda,
     bool? allowFragment,
@@ -166,6 +174,7 @@ class EvolutionSettings {
         targetCountry: targetCountry ?? this.targetCountry,
         countries: countries ?? this.countries,
         transports: transports ?? this.transports,
+        awgProfiles: awgProfiles ?? this.awgProfiles,
         disabledLoci: disabledLoci ?? this.disabledLoci,
         useEda: useEda ?? this.useEda,
         allowFragment: allowFragment ?? this.allowFragment,
@@ -189,6 +198,7 @@ class EvolutionSettings {
         'targetCountry': targetCountry,
         'countries': countries,
         'transports': [for (final t in transports) t.wire],
+        'awgProfiles': [for (final p in awgProfiles) p.wire],
         'disabledLoci': [for (final l in disabledLoci) l.wire],
         'useEda': useEda,
         'allowFragment': allowFragment,
@@ -205,9 +215,10 @@ class EvolutionSettings {
       populationSize: _int(j['populationSize'], 16),
       maxGenerations: _int(j['maxGenerations'], 8),
       maxRequests: _int(j['maxRequests'], 1080),
-      rungAttempts: [for (final e in (j['rungAttempts'] as List? ?? const [1, 2, 3])) _int(e, 1)]
-          .where((e) => e > 0)
-          .toList(),
+      rungAttempts: [
+        for (final e in (j['rungAttempts'] as List? ?? const [1, 2, 3]))
+          _int(e, 1),
+      ].where((e) => e > 0).toList(),
       rungKeepFraction: _double(j['rungKeepFraction'], 0.5),
       eliteFraction: _double(j['eliteFraction'], 0.35),
       mutationRate: _double(j['mutationRate'], 0.12),
@@ -220,23 +231,29 @@ class EvolutionSettings {
         for (final w in strs(j['transports'])) EvoTransport.fromWire(w),
         if (strs(j['transports']).isEmpty) ...EvoTransport.values,
       },
+      awgProfiles: {
+        for (final w in strs(j['awgProfiles'])) AwgProfile.fromWire(w),
+        if (strs(j['awgProfiles']).isEmpty) AwgProfile.warp15,
+      },
       disabledLoci: {
         for (final w in strs(j['disabledLoci']))
-          EvoLocus.values.firstWhere((l) => l.wire == w,
-              orElse: () => EvoLocus.transport),
+          EvoLocus.values.firstWhere(
+            (l) => l.wire == w,
+            orElse: () => EvoLocus.transport,
+          ),
       },
       useEda: j['useEda'] != false,
       allowFragment: j['allowFragment'] != false,
       allowRecordFragment: j['allowRecordFragment'] != false,
-      requestTimeout:
-          Duration(milliseconds: _int(j['requestTimeoutMs'], 8000)),
+      requestTimeout: Duration(milliseconds: _int(j['requestTimeoutMs'], 8000)),
       seed: _int(j['seed'], 0),
       minPassRate: _double(j['minPassRate'], 0.34),
     );
   }
 
   static int _int(Object? v, int dflt) => v is num ? v.toInt() : dflt;
-  static double _double(Object? v, double dflt) => v is num ? v.toDouble() : dflt;
+  static double _double(Object? v, double dflt) =>
+      v is num ? v.toDouble() : dflt;
 
   /// Диапазоны ручного ввода (экран их валидирует, движок — нет: настройки
   /// приходят с экрана, а не из сети).
@@ -253,7 +270,9 @@ class EvolutionSettings {
     final raw = await SettingsStorage.getVar(storageKey, '');
     if (raw.isEmpty) return const EvolutionSettings();
     try {
-      return EvolutionSettings.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+      return EvolutionSettings.fromJson(
+        jsonDecode(raw) as Map<String, dynamic>,
+      );
     } catch (_) {
       // Побитый JSON не должен валить экран настроек: молча берём дефолты.
       return const EvolutionSettings();
@@ -268,6 +287,7 @@ class EvolutionSettings {
   AlleleSource poolsFor(EvolutionPools base) => RestrictedPools(
         base,
         transports: transports,
+        awgProfiles: awgProfiles,
         disabledLoci: disabledLoci,
         fragment: allowFragment,
         recordFragment: allowRecordFragment,

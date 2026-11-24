@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../../models/node_spec.dart' show Awg;
 import '../app_log.dart';
+import 'awg_profile.dart';
 import 'masque_account.dart';
 import 'masque_keys.dart';
 import 'masquerade_params.dart';
@@ -143,17 +144,7 @@ class WarpClient {
     int jmin = 40,
     int jmax = 70,
   }) =>
-      <String, Object>{
-        'jc': jc,
-        'jmin': jmin,
-        'jmax': jmax,
-        's1': 0,
-        's2': 0,
-        'h1': 1,
-        'h2': 2,
-        'h3': 3,
-        'h4': 4,
-      };
+      amneziaWarpHandshakeFields(jc: jc, jmin: jmin, jmax: jmax);
 
   /// §143 — собирает [Awg] для obfuscate-ветки через masquerade `id/ip/ib`
   /// (ядро 009 само разворачивает в `i1`; LxBox `i1` НЕ генерит).
@@ -164,19 +155,23 @@ class WarpClient {
   /// - `ib` = браузер ([QuicParams.ib]) — только при `ip=quic`.
   ///
   /// **Не пишем `i1`** — `id/ip/ib` взаимоисключающи с явным `i1` (ядро отвергает оба).
-  static Awg buildAmneziaAwg(QuicParams params) {
+  static Awg buildAmneziaAwg(
+    QuicParams params, {
+    AwgProfile profile = AwgProfile.warp15,
+  }) {
     final sni = params.sni.trim();
     final domain = sni.isEmpty ? 'www.google.com' : sni;
     final ip = params.ip.trim().isEmpty ? 'quic' : params.ip.trim();
+    final ib = params.ib.trim().isEmpty ? 'chrome' : params.ib.trim();
 
-    final fields = amneziaPreset(
-        jc: params.jc, jmin: params.jmin, jmax: params.jmax)
-      ..['ip'] = ip
-      ..['id'] = domain;
-    if (ip == 'quic') {
-      fields['ib'] = params.ib.trim().isEmpty ? 'chrome' : params.ib.trim();
-    }
-    return Awg(fields);
+    return profile.build(
+      ip: ip,
+      id: domain,
+      ib: ib,
+      jc: params.jc,
+      jmin: params.jmin,
+      jmax: params.jmax,
+    );
   }
 
   /// Регистрирует устройство. Опциональный [licenseKey] — WARP+; если задан,

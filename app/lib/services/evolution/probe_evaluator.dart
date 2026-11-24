@@ -34,7 +34,7 @@ import '../parser/mappers/uri_pipeline.dart' show parseLinkViaPipeline;
 import '../probe/probe_config.dart';
 import '../settings_storage.dart';
 import '../warp/scan/endpoint_scanner.dart'
-    show geoBodyHint, kGeoUrls, parseGeoBody, probeGeoAttempt;
+    show parseCloudflareTrace, probeGeoAttempt;
 import '../warp/scan/scan_log.dart';
 import '../warp/scan/scan_node_builder.dart';
 import '../warp/scan/scan_pool.dart';
@@ -80,6 +80,9 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
   Map<String, Map<String, dynamic>> _dnsBodyByTag = const {};
   bool _prepared = false;
   bool _stopped = false;
+
+  /// §669 — runId текущей probe-сессии (0, если не поднята).
+  int _runId = 0;
 
   @override
   Future<String?> prepare() async {
@@ -257,8 +260,9 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
         });
         final json = cfg.configJson;
         if (json == null) continue;
-        final err = await _cc.probeStart(_withDns(json, group.key));
-        if (err.isNotEmpty) {
+        final started = await _cc.probeStart(_withDns(json, group.key));
+        final err = started.error;
+        if (!started.ok) {
           log.e('evo', 'probeStart failed: $err');
           // Сессия не поднялась — это ТЕХНИЧЕСКИЙ сбой, а не «проходимость 0»:
           // различать их важно, иначе эволюция похоронит живых кандидатов.
@@ -269,6 +273,7 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
           }
           continue;
         }
+        _runId = started.runId;
         log.i('evo', 'probe session up: ${cfg.tagByIndex.length} tags');
         try {
           for (final slot in cfg.tagByIndex.entries) {
@@ -284,7 +289,7 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
             }
           }
         } finally {
-          await _cc.probeStop();
+          await _cc.probeStop(_runId);
         }
       }
       closeUnprobed();
@@ -298,6 +303,7 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
         g,
         (url) => _cc.probeGetUrl(
           tag,
+          runId: _runId,
           link: url,
           timeoutMs: timeout.inMilliseconds,
           maxBytes: 4096,
@@ -382,14 +388,30 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
     _builder = null;
     _prepared = false;
     try {
-      await _cc.probeStop();
+      await _cc.probeStop(_runId);
     } catch (_) {
       // Идемпотентно: сессии могло и не быть (probeStart не вызывался).
     }
+    _runId = 0;
   }
 
   /// Немедленная остановка (UI при закрытии экрана; движок использует `cancel`).
   void stop() => _stopped = true;
+}
+
+/// Источники гео (§844): ротация по списку — сначала JSON-мета
+/// (`speed.cloudflare.com/meta`), потом trace двух доменов.
+const List<String> kGeoUrls = [
+  'https://speed.cloudflare.com/meta',
+  'https://www.cloudflare.com/cdn-cgi/trace',
+  'https://1.1.1.1/cdn-cgi/trace',
+];
+
+/// Компактная подпись тела для журнала (пробелы схлопнуты, до 60 символов).
+String geoBodyHint(String body) {
+  final flat = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (flat.isEmpty) return '(пустой ответ)';
+  return flat.length <= 60 ? flat : '${flat.substring(0, 60)}…';
 }
 
 /// §848 — вердикт ОДНОЙ пробы по одному узлу: серия GET'ов по источникам гео.
@@ -448,7 +470,7 @@ Future<Observation> probeGeoSeries(
           : 'HTTP ${r.status} (не 2xx) — ${geoBodyHint(r.content)}';
       continue;
     }
-    final geo = parseGeoBody(parsed.content);
+    final geo = parseCloudflareTrace(parsed.content);
     // 2xx без гео-ответа — тело чужое (перехват/редирект): идём по следующим
     // источникам, «прошёл» по такому ответу не выставляется.
     if (geo.country.isEmpty && geo.colo.isEmpty) {

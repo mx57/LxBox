@@ -11,6 +11,7 @@
 
 import 'dart:math';
 
+import '../warp/awg_profile.dart';
 import '../warp/scan/scan_pool.dart';
 import 'genome.dart';
 
@@ -41,8 +42,12 @@ abstract class AlleleSource {
 /// Набор пулов, из которых эволюция собирает и мутирует геномы.
 class EvolutionPools implements AlleleSource {
   const EvolutionPools({
-    this.transports = const {EvoTransport.awg, EvoTransport.masqueH3,
-        EvoTransport.masqueH2},
+    this.transports = const {
+      EvoTransport.awg,
+      EvoTransport.masqueH3,
+      EvoTransport.masqueH2,
+    },
+    this.awgProfiles = const {AwgProfile.warp15},
     this.endpoints = const [],
     this.endpointsByCountry = const {},
     this.wgPorts = const [2408, 500, 1701, 4500],
@@ -63,6 +68,7 @@ class EvolutionPools implements AlleleSource {
   });
 
   final Set<EvoTransport> transports;
+  final Set<AwgProfile> awgProfiles;
 
   /// Все известные адреса (без порта). Дефолтный домен локуса `endpoint`.
   final List<String> endpoints;
@@ -125,8 +131,13 @@ class EvolutionPools implements AlleleSource {
     switch (locus) {
       case EvoLocus.transport:
         // Пустое поле = «не ограничивать» — так же, как в [random].
-        final t = (transports.isEmpty ? EvoTransport.values : transports).toList();
+        final t =
+            (transports.isEmpty ? EvoTransport.values : transports).toList();
         return Alleles([for (final x in t) x.wire]);
+      case EvoLocus.awgProfile:
+        final profiles =
+            (awgProfiles.isEmpty ? AwgProfile.values : awgProfiles).toList();
+        return Alleles([for (final p in profiles) p.wire]);
       case EvoLocus.endpoint:
         final eps = endpointsFor(countries);
         return eps.isEmpty ? Alleles.empty : Alleles(eps);
@@ -168,17 +179,16 @@ class EvolutionPools implements AlleleSource {
   /// на значениях по умолчанию — это честнее, чем выдумывать адрес.
   @override
   Genome random(Random rng, {Iterable<String> countries = const []}) {
-    final trList = (transports.isEmpty ? EvoTransport.values : transports)
-        .toList();
+    final trList =
+        (transports.isEmpty ? EvoTransport.values : transports).toList();
     final transport = trList[rng.nextInt(trList.length)];
     final eps = endpointsFor(countries);
     final ports = portsFor(transport);
     String v(EvoLocus l) => alleles(l, countries: countries).pick(rng);
     return Genome(
       transport: transport,
-      endpoint: eps.isEmpty
-          ? ''
-          : eps[rng.nextInt(eps.length)],
+      awgProfile: AwgProfile.fromWire(v(EvoLocus.awgProfile)),
+      endpoint: eps.isEmpty ? '' : eps[rng.nextInt(eps.length)],
       port: ports.isEmpty ? 443 : ports[rng.nextInt(ports.length)],
       sni: v(EvoLocus.sni),
       keepalive: int.tryParse(v(EvoLocus.keepalive)) ?? 0,
@@ -209,6 +219,7 @@ class EvolutionPools implements AlleleSource {
       EvoTransport.masqueH3,
       EvoTransport.masqueH2,
     },
+    Set<AwgProfile> awgProfiles = const {AwgProfile.warp15},
   }) {
     final sniPool = <String>{
       ...sniOverride,
@@ -223,6 +234,7 @@ class EvolutionPools implements AlleleSource {
     }.where((e) => e.isNotEmpty).toList();
     return EvolutionPools(
       transports: transports,
+      awgProfiles: awgProfiles,
       endpoints: endpoints,
       endpointsByCountry: endpointsByCountry,
       wgPorts: pool != null && pool.wgPorts.isNotEmpty
@@ -255,6 +267,7 @@ class RestrictedPools implements AlleleSource {
   const RestrictedPools(
     this.base, {
     this.transports = const {},
+    this.awgProfiles = const {},
     this.disabledLoci = const {},
     this.fragment = true,
     this.recordFragment = true,
@@ -267,6 +280,7 @@ class RestrictedPools implements AlleleSource {
   /// настройки меняются после пула: экран строит пул из asset'а один раз, а
   /// галки транспортов пользователь крутит на каждой кампании.
   final Set<EvoTransport> transports;
+  final Set<AwgProfile> awgProfiles;
 
   final Set<EvoLocus> disabledLoci;
 
@@ -294,7 +308,20 @@ class RestrictedPools implements AlleleSource {
         // обязан оставаться подмножеством выбора экрана, иначе мутация «уведёт»
         // особь в транспорт, который снят галкой.
         return Alleles(
-            allowed.isEmpty ? [for (final t in transports) t.wire] : allowed);
+          allowed.isEmpty ? [for (final t in transports) t.wire] : allowed,
+        );
+      case EvoLocus.awgProfile:
+        if (awgProfiles.isEmpty) {
+          return base.alleles(locus, countries: countries);
+        }
+        final baseWires = base.alleles(locus, countries: countries).values;
+        final allowed = [
+          for (final p in awgProfiles)
+            if (baseWires.isEmpty || baseWires.contains(p.wire)) p.wire,
+        ];
+        return Alleles(
+          allowed.isEmpty ? [for (final p in awgProfiles) p.wire] : allowed,
+        );
       case EvoLocus.fragment:
         return Alleles(fragment ? const ['0', '1'] : const ['0']);
       case EvoLocus.recordFragment:
@@ -319,6 +346,12 @@ class RestrictedPools implements AlleleSource {
         port: ports.isEmpty ? g.port : ports[rng.nextInt(ports.length)],
       );
     }
+    if (g.transport == EvoTransport.awg &&
+        awgProfiles.isNotEmpty &&
+        !awgProfiles.contains(g.awgProfile)) {
+      final list = awgProfiles.toList();
+      g = g.copyWith(awgProfile: list[rng.nextInt(list.length)]);
+    }
     // Замороженный локус не должен получать значение и из посева: берём
     // дефолт генома (это же значение, что «ключ не писать в тело»).
     for (final l in disabledLoci) {
@@ -326,6 +359,7 @@ class RestrictedPools implements AlleleSource {
         EvoLocus.fragment => g.copyWith(fragment: false),
         EvoLocus.recordFragment => g.copyWith(recordFragment: false),
         EvoLocus.sniCase => g.copyWith(sniCase: 0),
+        EvoLocus.awgProfile => g.copyWith(awgProfile: AwgProfile.warp15),
         EvoLocus.dns => g.copyWith(dnsTag: ''),
         EvoLocus.mtu => g.copyWith(mtu: 0),
         EvoLocus.keepalive => g.copyWith(keepalive: 0),

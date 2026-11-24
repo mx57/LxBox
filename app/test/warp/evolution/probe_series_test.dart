@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lxbox/services/evolution/genome.dart';
 import 'package:lxbox/services/evolution/probe_evaluator.dart';
-import 'package:lxbox/services/warp/scan/endpoint_scanner.dart' show kGeoUrls;
 import 'package:lxbox/vpn/cc_channel.dart';
 
 /// §848 — серия гео-проб одной особи без устройства и ядра: [probeGeoSeries]
@@ -15,7 +14,8 @@ void main() {
     sni: 'www.cloudflare.com',
   );
 
-  const traceFra = 'floc=51.5002,-0.1262\nvizxaz=359289\n colo=FRA\ngwips=...\nloc=GB\n';
+  const traceFra =
+      'floc=51.5002,-0.1262\nvizxaz=359289\n colo=FRA\ngwips=...\nloc=GB\n';
 
   CcGetUrlResult result({
     int status = 200,
@@ -41,7 +41,8 @@ void main() {
       (url) async {
         called.add(url);
         return called.length == 1
-            ? result(status: 0, error: 'lookup speed.cloudflare.com: no such host')
+            ? result(
+                status: 0, error: 'lookup speed.cloudflare.com: no such host')
             : result(content: traceFra);
       },
       urls: const ['https://a', 'https://b'],
@@ -49,7 +50,8 @@ void main() {
     expect(called, ['https://a', 'https://b']);
     expect(o.responded, isTrue);
     expect(o.colo, 'FRA');
-    expect(o.country, 'DE', reason: 'страна узла берётся из colo (§848)');
+    expect(o.country, 'GB',
+        reason: 'страна узла берётся из loc= тела trace (§848)');
     expect(o.requests, 2);
     expect(o.rttMs, 42);
     expect(o.url, 'https://b');
@@ -72,12 +74,13 @@ void main() {
   test('HTTP 200 с чужим телом — не проход, а подмена (§844)', () async {
     final o = await probeGeoSeries(
       genome,
-      (url) async =>
-          result(status: 200, content: '<html><title>Вход в сеть</title></html>'),
+      (url) async => result(
+          status: 200, content: '<html><title>Вход в сеть</title></html>'),
       urls: const ['https://a', 'https://b'],
     );
     expect(o.responded, isFalse,
-        reason: 'перехватчик отдаёт 200 — по нему нельзя судить о проходимости');
+        reason:
+            'перехватчик отдаёт 200 — по нему нельзя судить о проходимости');
     expect(o.error, contains('без geo-ответа'));
     expect(o.error, contains('Вход в сеть'));
     expect(o.requests, 2);
@@ -88,7 +91,8 @@ void main() {
     final messages = <String>[];
     final o = await probeGeoSeries(
       genome,
-      (url) async => result(status: 0, error: 'dial tcp: i/o timeout', elapsedMs: 8000),
+      (url) async =>
+          result(status: 0, error: 'dial tcp: i/o timeout', elapsedMs: 8000),
       urls: const ['https://a', 'https://b', 'https://c'],
       log: messages.add,
     );

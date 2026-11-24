@@ -13,6 +13,7 @@
 
 import '../../models/node_spec.dart' show NodeSpec;
 import '../../models/template_vars.dart' show TemplateVars;
+import '../warp/awg_profile.dart';
 import 'genome.dart';
 
 /// Причина, по которой узел не стал геномом. Коды, а не строки: перевод — дело
@@ -33,11 +34,7 @@ enum SeedSkipReason {
 
 /// Результат посева.
 class SeedSet {
-  SeedSet({
-    required this.genomes,
-    required this.skipped,
-    required this.total,
-  });
+  SeedSet({required this.genomes, required this.skipped, required this.total});
 
   final List<Genome> genomes;
 
@@ -51,7 +48,8 @@ class SeedSet {
 
   bool get isEmpty => genomes.isEmpty;
 
-  static SeedSet get empty => SeedSet(genomes: const [], skipped: const {}, total: 0);
+  static SeedSet get empty =>
+      SeedSet(genomes: const [], skipped: const {}, total: 0);
 }
 
 /// Собирает посев из списка узлов (экран передаёт `entry.list.nodes` по всем
@@ -132,8 +130,18 @@ Genome? _fromWireguard(Map<String, dynamic> body) {
   // и геном обязан описывать ТО, что будет оценено, а не исходное тело.
   // Значения ниже — те же дефолты, что дадут этот же билдер.
   final isAwg = body.containsKey('jc') || body.containsKey('ip');
+  final cps = AwgProfile.warpCps.extraFields;
+  final isWarpCps = isAwg &&
+      body['s1'] == 0 &&
+      body['s2'] == 0 &&
+      body['h1'] == 1 &&
+      body['h2'] == 2 &&
+      body['h3'] == 3 &&
+      body['h4'] == 4 &&
+      cps.entries.every((e) => body[e.key] == e.value);
   return Genome(
     transport: EvoTransport.awg,
+    awgProfile: isWarpCps ? AwgProfile.warpCps : AwgProfile.warp15,
     endpoint: address,
     port: port,
     sni: isAwg ? '${body['id'] ?? ''}' : '',
@@ -151,7 +159,9 @@ Genome? _fromWireguard(Map<String, dynamic> body) {
 
 int _seconds(Object? v) {
   if (v is num) return v.toInt();
-  if (v is String) return int.tryParse(v.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+  if (v is String) {
+    return int.tryParse(v.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+  }
   return 0;
 }
 

@@ -960,6 +960,30 @@ void main() {
           ],
         };
 
+    test('§740 i2 конфликтует с ip=sip, но не с quic/dns', () {
+      Map<String, dynamic> body(String ip) => {
+            ...awgBody(4),
+            'mtu': 1280,
+            'i2': '<t><r 28>',
+            'id': 'example.com',
+            'ip': ip,
+          };
+
+      for (final ip in const ['quic', 'dns']) {
+        final r = _san(body(ip), scheme: 'wireguard');
+        expect(r.body!['i2'], '<t><r 28>', reason: ip);
+        expect(r.body!['ip'], ip, reason: ip);
+        expect(_codes(r), isEmpty, reason: ip);
+      }
+
+      final sip = _san(body('sip'), scheme: 'wireguard');
+      expect(sip.body!.containsKey('i2'), isFalse);
+      expect(sip.body!['ip'], 'sip');
+      expect(_codes(sip), ['field_conflict']);
+      expect(_byCode(sip, 'field_conflict').path, 'i2');
+      expect(_byCode(sip, 'field_conflict').params['with'], 'ip');
+    });
+
     test('§473 any_set судит НАЛИЧИЕ ключа, а не заданность значения', () {
       // Пара к §467: `conflicts`/`requires` судят значение, и `jc: 0` для них
       // «не задано». Здесь ровно наоборот — `jc: 0` значит «мусорные пакеты

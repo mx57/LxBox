@@ -377,11 +377,18 @@ class EvolutionEngine {
     final order = nsga2Order(observed, targetCountry: settings.targetCountry);
     final ranked = [for (final i in order) observed[i]];
     final elites = ranked.take(settings.eliteSize).map((f) => f.genome).toList();
+    // Предложение: архив славы во вход EDA — победы, подтверждённые сессиями,
+    // должны тоже формировать распределение новых геномов (чуть слабее элиты).
+    final hofGenomes = hallOfFame.map((f) => f.genome).toList();
     final model = AlleleModel.fit(
-      elites,
+      [...elites, ...hofGenomes],
       pools,
-      // Вес по рангу: лучшая особь формирует распределение сильнее.
-      weighting: [for (var i = 0; i < elites.length; i++) 1.0 / (1.0 + i)],
+      // Вес по рангу: лучшая особь формирует распределение сильнее;
+      // архив проверенных особей — чуть слабее.
+      weighting: [
+        for (var i = 0; i < elites.length; i++) 1.0 / (1.0 + i),
+        ...List<double>.filled(hofGenomes.length, 0.25),
+      ],
       countries: settings.countries,
     );
     final div = diversity(elites);
@@ -428,6 +435,18 @@ class EvolutionEngine {
           ? _reserve.removeAt(0)
           : pools.random(rng, countries: settings.countries);
       add(g);
+    }
+    // Диверсификационный floor (предложение): пока разнообразие популяции ниже
+    // порога, набираем иммигрантов — без этого элита может всех поглотить, и
+    // прогон похоронит себя через 2–3 поколения бюджета.
+    guard = 0;
+    while (out.length < settings.populationSize &&
+        diversity(out) < 0.12 &&
+        guard < settings.populationSize) {
+      guard++;
+      final before = out.length;
+      add(pools.random(rng, countries: settings.countries));
+      if (out.length == before) break;
     }
     return out;
   }
