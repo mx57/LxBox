@@ -17,10 +17,10 @@ enum AwgProfile {
 
   /// Дополнительные CPS-декои. Ядро рандомизирует `<r>` при сборке пакета.
   /// `I1` не задаём: он идёт через `id/ip/ib` и не может сосуществовать с `i1`.
-  Map<String, Object> get extraFields => switch (this) {
+  Map<String, Object> extraFieldsFor(String ip) => switch (this) {
         AwgProfile.warp15 => const {},
-        AwgProfile.warpCps => const {
-            'i2': '<t><r 28>',
+        AwgProfile.warpCps => {
+            if (ip != 'sip') 'i2': '<t><r 28>',
             'i3': '<r 32>',
             'i4': '<r 32>',
             'i5': '<r 32>',
@@ -40,7 +40,7 @@ enum AwgProfile {
         'ip': ip,
         'id': id,
         if (ip == 'quic') 'ib': ib,
-        ...extraFields,
+        ...extraFieldsFor(ip),
       });
 }
 

@@ -56,12 +56,16 @@ Keep all existing defaults and constructors source-compatible.
 
 ## Contract and localization repairs
 
+- `warpCps` emits `I3..I5` with SIP but omits the conflicting `I2`; switching
+  from another masquerade protocol removes stale CPS fields before applying
+  the selected profile. Evolution cannot apply an empty AWG profile set when
+  AWG transport is enabled.
 - Restrict the shared WireGuard `I2` conflict to `ip=sip`; `ip=quic` and `ip=dns`
   remain valid. Update both registry mirrors, generated docs, and regression tests.
 - Record the local contract patch honestly in `app/contract.lock`; the launcher
   source repository is unavailable here, so `source_sha` remains empty.
-- Normalize Windows path separators before canonical contract sorting so the lock
-  hash matches the Unix implementation.
+- Normalize Windows path separators before canonical contract sorting and normalize
+  CRLF to LF before hashing so the lock hash matches Git's Unix checkout.
 - Repair the earlier fork merge's localization losses: remove 68 obsolete keys,
   restore 133 upstream keys, and translate 86 evolution keys in Russian and Chinese.
 - Split MASQUE hosts from `host:port` scanner endpoints to avoid malformed
@@ -72,14 +76,14 @@ Keep all existing defaults and constructors source-compatible.
 Local results on 2026-11-24:
 
 - `flutter analyze --no-pub`: 0 issues.
-- Focused WARP/evolution/contract/l10n suite: 426 tests passed.
+- Focused WARP/evolution/contract/l10n suite: 429 tests passed.
 - `template_check --strict`: 0 failures, 0 warnings.
 - `ui_check --strict`: ru/zh each 2317 keys, 0 missing, 0 orphan, 0 arity errors.
 - `hardcoded_check --strict`: 0 findings in 611 files.
 - `kotlin_check --strict`: 0 findings.
 - Docs parity: 0 failures, 0 warnings.
 - Contract lock and both mirrors: hash
-  `48b83da534031fdcb7334549117638a4a503fd208ddc891ab1aafeac49b98211`.
+  `350deafd89addfc633745a97c7729b72c3d2981d2f058272b72a614cd06753c4`.
 - `git diff --check`: clean.
 
 The full test suite and Android APK/AAB build run in GitHub Actions. No live-device

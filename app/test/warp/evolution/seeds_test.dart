@@ -48,6 +48,7 @@ void main() {
     int port = 2408,
     String sni = 'yandex.ru',
     AwgProfile profile = AwgProfile.warp15,
+    String junkProto = 'quic',
   }) {
     final uri = ScanNodeBuilder(warp: warp(), wgKeepalive: 25).uriFor(
       ScanCandidate(
@@ -56,7 +57,7 @@ void main() {
         protocol: ScanProtocol.awg,
         sni: sni,
         awgParams: AwgParams(
-          ip: 'quic',
+          ip: junkProto,
           jc: 4,
           jmin: 40,
           jmax: 70,
@@ -108,6 +109,14 @@ void main() {
         awgNode(profile: AwgProfile.warpCps),
       ]);
       expect(set.genomes, hasLength(2), reason: 'профиль входит в identity');
+    });
+
+    test('warpCps с SIP распознаётся по I3..I5 без I2', () {
+      final cps = genomeOfNode(
+        awgNode(profile: AwgProfile.warpCps, junkProto: 'sip'),
+      )!;
+      expect(cps.awgProfile, AwgProfile.warpCps);
+      expect(cps.junkProto, 'sip');
     });
 
     test('MASQUE h3 и h2 → соответствующий транспорт и SNI', () {

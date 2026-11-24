@@ -192,6 +192,16 @@ void main() {
       }
     });
 
+    test('warpCps с SIP оставляет I3..I5 и удаляет I2', () {
+      final cps = awg.copyWith(awgProfile: AwgProfile.warpCps);
+      final quic = cps.applyTo(awgBody());
+      final sip = cps.copyWith(junkProto: 'sip').applyTo(quic);
+      expect(sip['ip'], 'sip');
+      expect(sip.containsKey('i2'), isFalse);
+      expect(sip['i3'], '<r 32>');
+      expect(sip['i5'], '<r 32>');
+    });
+
     test('профиль доходит до кандидата, MASQUE его игнорирует', () {
       final cps = awg.copyWith(awgProfile: AwgProfile.warpCps);
       expect(cps.toCandidate().awgParams?.profile, AwgProfile.warpCps);

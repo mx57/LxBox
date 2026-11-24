@@ -213,7 +213,9 @@ String _treeHash(Directory dir) {
   // пакет в зависимости.
   final bytes = <int>[];
   for (final path in paths) {
-    bytes.addAll(File(path).readAsBytesSync());
+    // Git хранит LF, а Windows checkout может преобразовать их в CRLF.
+    final content = File(path).readAsStringSync().replaceAll('\r\n', '\n');
+    bytes.addAll(utf8.encode(content));
   }
   return sha256.convert(bytes).toString();
 }
