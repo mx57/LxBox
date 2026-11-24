@@ -194,9 +194,9 @@ String? _lockHash(String content) {
 }
 
 /// Хеш дерева — ТОТ ЖЕ алгоритм, что в tool/sync_contract.sh:
-/// `find -type f | sort | xargs cat | shasum -a 256`, то есть sha256 от
-/// склеенного содержимого файлов в байтовом порядке путей. Имена в хеш не
-/// входят. Считать иначе нельзя: проверка падала бы на каждом прогоне.
+/// `find -type f | sort | xargs cat`, затем CRLF→LF и sha256 от склеенного
+/// содержимого в байтовом порядке путей. Имена в хеш не входят. Считать иначе
+/// нельзя: проверка падала бы на каждом прогоне.
 String _treeHash(Directory dir) {
   final paths = dir
       .listSync(recursive: true)

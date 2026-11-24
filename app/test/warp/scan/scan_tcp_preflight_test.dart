@@ -145,8 +145,7 @@ void main() {
   });
 
   // §839 — SNI ротируется по кандидатам. До правки ВСЕ MASQUE-узлы шли с
-  // `masqueSniPool.first`, а это ровно родной `consumer-masque.cloudflareclient.com`
-  // (он же `recommended_sni`): один «паливный» домен на весь батч, и DPI режет
+  // `masqueSniPool.first`: один узнаваемый домен на весь батч, и DPI режет
   // по нему всё разом. Проверяем саму ротацию (чистая функция — не требует ни
   // ядра, ни аккаунта) и то, что настоящий пул снабжён приманками.
   test('§839: rotateMasqueSni разносит кандидатов по пулу, не повторяя первый',
@@ -165,16 +164,14 @@ void main() {
     expect(rotateMasqueSni(pool, 1), isNot(rotateMasqueSni(pool, 0)));
   });
 
-  test('§839: родной SNI лежит в пуле первым — значит нужна ротация', () async {
+  test('§839: родной SNI остаётся в пуле — значит нужна ротация', () async {
     final raw = await rootBundle.loadString('assets/warp_endpoints.json');
     final json = jsonDecode(raw) as Map<String, dynamic>;
     final mq = json['masque'] as Map<String, dynamic>;
     final pool = (mq['sni_pool'] as List).cast<String>();
     expect(pool.length, greaterThan(1), reason: 'в пуле есть приманки');
-    // Именно поэтому §839 обязателен: без ротации весь батч шёл под родным
-    // доменом (легко узнаваемая подпись MASQUE-подключения к Cloudflare).
     expect(pool.first, mq['recommended_sni']);
-    expect(pool.first, contains('consumer-masque'));
+    expect(pool, contains('consumer-masque.cloudflareclient.com'));
   });
 
   // §840 — повторные попытки по не ответившим адресам: классификатор одной

@@ -100,7 +100,7 @@ _tree_hash() {
   local dir="$1"
   find "$dir" -type f -print0 \
     | LC_ALL=C sort -z \
-    | xargs -0 cat \
+    | xargs -0 -n1 perl -0777 -pe 's/\r\n/\n/g' \
     | shasum -a 256 \
     | awk '{print $1}'
 }

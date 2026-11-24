@@ -599,16 +599,21 @@ void main() {
     const channel = MethodChannel('com.leadaxe.lxbox/methods');
     final calls = <MethodCall>[];
     String probeStartAnswer = '';
+    var nextRunId = 0;
 
     setUp(() {
       calls.clear();
       probeStartAnswer = '';
+      nextRunId = 0;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
         calls.add(call);
         switch (call.method) {
           case 'probeStart':
-            return probeStartAnswer;
+            return {
+              'runId': probeStartAnswer.isEmpty ? ++nextRunId : 0,
+              'error': probeStartAnswer,
+            };
           case 'probeUrlTest':
             final tag = (call.arguments as Map)['tag'] as String;
             // Alpha живой (120мс), остальные — err.
