@@ -130,7 +130,7 @@ Genome? _fromWireguard(Map<String, dynamic> body) {
   // и геном обязан описывать ТО, что будет оценено, а не исходное тело.
   // Значения ниже — те же дефолты, что дадут этот же билдер.
   final isAwg = body.containsKey('jc') || body.containsKey('ip');
-  final cps = AwgProfile.warpCps.extraFields;
+  final cps = AwgProfile.warpCps.extraFieldsFor('${body['ip'] ?? 'quic'}');
   final isWarpCps = isAwg &&
       body['s1'] == 0 &&
       body['s2'] == 0 &&
@@ -138,6 +138,7 @@ Genome? _fromWireguard(Map<String, dynamic> body) {
       body['h2'] == 2 &&
       body['h3'] == 3 &&
       body['h4'] == 4 &&
+      (body['ip'] != 'sip' || !body.containsKey('i2')) &&
       cps.entries.every((e) => body[e.key] == e.value);
   return Genome(
     transport: EvoTransport.awg,

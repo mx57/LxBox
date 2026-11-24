@@ -2080,7 +2080,11 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton(
-                    onPressed: _s.transports.isEmpty ? null : () => Navigator.of(context).pop(_s),
+                    onPressed: _s.transports.isEmpty ||
+                            (_s.transports.contains(EvoTransport.awg) &&
+                                _s.awgProfiles.isEmpty)
+                        ? null
+                        : () => Navigator.of(context).pop(_s),
                     child: Text(getLocalText.s('Apply')),
                   ),
                 ),

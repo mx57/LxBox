@@ -128,6 +128,22 @@ void main() {
       },
     );
 
+    test('§740 warpCps с SIP не добавляет конфликтующий I2', () {
+      final awg = WarpClient.buildAmneziaAwg(
+        const QuicParams(sni: 'ozon.ru', ip: 'sip'),
+        profile: AwgProfile.warpCps,
+      );
+      expect(awg.fields.containsKey('i2'), isFalse);
+      expect(awg.fields['i3'], '<r 32>');
+      expect(awg.fields['i5'], '<r 32>');
+      final spec = parseWireguardIni(
+        account(awg: awg).toWireguardConf(profile: AwgProfile.warpCps),
+      );
+      expect(spec?.awg?.fields['ip'], 'sip');
+      expect(spec?.awg?.fields.containsKey('i2'), isFalse);
+      expect(spec?.awg?.fields['i3'], '<r 32>');
+    });
+
     test('§740 неизвестный профиль мигрирует в warp15', () {
       expect(AwgProfile.fromWire(null), AwgProfile.warp15);
       expect(AwgProfile.fromWire('awg3'), AwgProfile.warp15);

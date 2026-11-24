@@ -396,12 +396,11 @@ class Genome {
       body['jc'] = jc;
       body['jmin'] = jitterMin;
       body['jmax'] = jitterMax;
+      for (final key in const ['i2', 'i3', 'i4', 'i5']) {
+        body.remove(key);
+      }
       if (awgProfile == AwgProfile.warpCps) {
-        body.addAll(awgProfile.extraFields);
-      } else {
-        for (final key in const ['i2', 'i3', 'i4', 'i5']) {
-          body.remove(key);
-        }
+        body.addAll(awgProfile.extraFieldsFor(junkProto));
       }
     }
     return body;
