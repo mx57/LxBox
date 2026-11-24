@@ -1039,7 +1039,9 @@ class EndpointScanner {
         'probeStart: тегов=${cfg.tagByIndex.length} '
         'конфиг=${cfg.configJson!.length}B битых=${cfg.brokenByIndex.length}',
       );
-      final err = await _cc.probeStart(cfg.configJson!);
+      final started = await _cc.probeStart(cfg.configJson!);
+      final err = started.error;
+      final runId = started.runId;
       if (err.isNotEmpty) {
         log?.e('p2', 'probeStart не поднялся: $err');
         return (meta: out, error: err);
@@ -1059,6 +1061,7 @@ class EndpointScanner {
               if (_cancelled) break;
               last = await _cc.probeGetUrl(
                 entry.value,
+                runId: runId,
                 link: _trace(),
                 timeoutMs: 8000,
                 maxBytes: 4096,
@@ -1098,7 +1101,7 @@ class EndpointScanner {
           onProgress?.call(done, eps.length);
         }
       } finally {
-        await _cc.probeStop();
+        await _cc.probeStop(runId);
         log?.i('p2', 'probe-сессия ядра погашена');
       }
     }

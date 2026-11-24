@@ -42,8 +42,7 @@ import '../services/l10n/locale_controller.dart';
 import '../services/settings_storage.dart';
 import '../services/ui_helpers.dart';
 import '../services/usage_region.dart';
-import '../services/warp/scan/endpoint_scanner.dart'
-    show countryName, kGeoUrls;
+import '../services/warp/scan/endpoint_scanner.dart' show countryName;
 import '../services/warp/scan/scan_log.dart';
 import '../services/warp/scan/scan_pool.dart';
 import '../widgets/app_bottom_sheet.dart';
