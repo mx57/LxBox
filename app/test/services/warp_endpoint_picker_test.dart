@@ -138,10 +138,12 @@ void main() {
     }
   });
 
-  test('masque recommended_sni: родной домен первым в пуле и помечен', () async {
+  test('masque recommended_sni: дефолт ядра первым в пуле и помечен', () async {
     final p = await WarpEndpointPicker.load(region: '');
-    // Явный ключ asset'а задаёт и рекомендацию, и первый элемент пула.
-    expect(p.recommendedMasqueSni, 'consumer-masque.cloudflareclient.com');
+    // §638: рекомендованный SNI — дефолт ядра `www.cloudflare.com` (§393);
+    // родной consumer-masque остаётся в пуле как кандидат перебора (§143).
+    expect(p.recommendedMasqueSni, 'www.cloudflare.com');
+    expect(p.masqueSniPool, contains('consumer-masque.cloudflareclient.com'));
     expect(p.masqueSniPool.first, p.recommendedMasqueSni);
   });
 
