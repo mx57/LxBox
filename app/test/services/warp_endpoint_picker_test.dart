@@ -37,7 +37,12 @@ void main() {
   test('§386/§420 masqueHostsPreset: recommended — явный ключ, IP обоих '
       'транспортов (его же отдаёт регистрация), без масок', () async {
     final p = await WarpEndpointPicker.load(region: '');
-    expect(p.masqueHostsPreset, ['162.159.198.2', '162.159.199.2']);
+    expect(p.masqueHostsPreset, [
+      '162.159.198.2',
+      '162.159.199.2',
+      '162.159.197.3',
+      '162.159.197.4',
+    ]);
     expect(p.recommendedMasqueHost, '162.159.198.2');
     expect(p.masqueHostsPreset, contains(p.recommendedMasqueHost));
     for (final h in p.masqueHostsPreset) {
@@ -135,22 +140,26 @@ void main() {
 
   test('masque recommended_sni: родной домен первым в пуле и помечен', () async {
     final p = await WarpEndpointPicker.load(region: '');
-    // §638: рекомендованный SNI — дефолт ядра `www.cloudflare.com` (§393);
-    // родной consumer-masque остаётся в пуле как кандидат перебора (§143).
-    expect(p.recommendedMasqueSni, 'www.cloudflare.com');
-    expect(p.masqueSniPool, contains('consumer-masque.cloudflareclient.com'));
+    // Явный ключ asset'а задаёт и рекомендацию, и первый элемент пула.
+    expect(p.recommendedMasqueSni, 'consumer-masque.cloudflareclient.com');
     expect(p.masqueSniPool.first, p.recommendedMasqueSni);
   });
 
   // §305 — asset несёт device-verified MASQUE-данные боевого теста.
-  test('§305 masque-блоки asset = только живые .198/.199', () async {
+  test('§305 masque-блоки asset = живые .197/.198/.199', () async {
     final p = await WarpEndpointPicker.load(region: '');
-    expect(p.masqueV4Cidr, ['162.159.198.0/24', '162.159.199.0/24']);
-    // §305/§420 — h3 живёт только на 4 хостах (device-verified 05.09.2026
-    // живыми туннелями), не по всему блоку: общие .2 + h3-only .1.
+    expect(p.masqueV4Cidr, [
+      '162.159.198.0/24',
+      '162.159.199.0/24',
+      '162.159.197.0/24',
+    ]);
+    // §305/§420 — h3 живёт только на пресет-хостах и h3-only .1,
+    // не по всему блоку.
     expect(p.masqueH3Hosts, [
       '162.159.198.2',
       '162.159.199.2',
+      '162.159.197.3',
+      '162.159.197.4',
       '162.159.198.1',
       '162.159.199.1',
     ]);
@@ -163,11 +172,21 @@ void main() {
       () async {
     final p = await WarpEndpointPicker.load(region: '');
     expect(p.masqueHostsFor('h3'), p.masqueH3Hosts);
-    expect(p.masqueHostsFor('h2'), ['162.159.198.2', '162.159.199.2']);
-    expect(p.masqueHostsFor('auto'), ['162.159.198.2', '162.159.199.2']);
+    expect(p.masqueHostsFor('h2'), [
+      '162.159.198.2',
+      '162.159.199.2',
+      '162.159.197.3',
+      '162.159.197.4',
+    ]);
+    expect(p.masqueHostsFor('auto'), [
+      '162.159.198.2',
+      '162.159.199.2',
+      '162.159.197.3',
+      '162.159.197.4',
+    ]);
   });
 
-  test('§305 randomMasqueIp: h3 — ТОЛЬКО 4 живых хоста, h2 — весь блок',
+  test('§305 randomMasqueIp: h3 — ТОЛЬКО живые хосты, h2 — весь блок',
       () async {
     final p = await WarpEndpointPicker.load(region: '');
     const h3hosts = {
@@ -175,6 +194,8 @@ void main() {
       '162.159.198.2',
       '162.159.199.1',
       '162.159.199.2',
+      '162.159.197.3',
+      '162.159.197.4',
     };
     final h2seen = <String>{};
     for (var i = 0; i < 100; i++) {
@@ -185,14 +206,15 @@ void main() {
       final ipH2 = p.randomMasqueIp(network: 'h2');
       expect(ipH2, isNotNull);
       expect(ipH2!.startsWith('162.159.198.') ||
-          ipH2.startsWith('162.159.199.'), isTrue,
+          ipH2.startsWith('162.159.199.') ||
+          ipH2.startsWith('162.159.197.'), isTrue,
           reason: 'h2 IP $ipH2 вне masque-блоков');
       // §420 — h3-only адреса (.1) из h2-рандома исключены.
       expect(ipH2, isNot(anyOf('162.159.198.1', '162.159.199.1')),
           reason: 'h2 IP $ipH2 — h3-only хост');
       h2seen.add(ipH2);
     }
-    // h2 действительно варьируется по блоку, а не сидит на 4 адресах.
+    // h2 действительно варьируется по блоку, а не сидит на h3-списке.
     expect(h2seen.length, greaterThan(h3hosts.length),
         reason: 'h2 должен разбрасываться шире, чем h3-список');
     const allPorts = [443, 500, 1701, 4500, 4443, 8443, 8095];
