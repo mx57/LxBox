@@ -155,6 +155,12 @@ class _EvolutionScreenState extends State<EvolutionScreen>
       _assetPool = pool;
       _dnsRefs = dns;
     });
+    // Семена могли прийти после нажатия Start (рейс: экран открылся, пока
+    // `_loadContext` ещё вернёт) — тогда ошибка «нет семян» оставлена
+    // висеть поверх живых кандидатов или блокирует ретрай повторной попыткой.
+    if (_seeds.genomes.isNotEmpty && _error != null) {
+      setState(() => _error = null);
+    }
   }
 
   // ───────────────────────── пулы мутаций ─────────────────────────
@@ -838,6 +844,14 @@ class _EvolutionScreenState extends State<EvolutionScreen>
             const SizedBox(height: 4),
             Text(
               skipped,
+              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+            ),
+          ],
+          if (s.genomes.isEmpty && s.total > 0) ...[
+            const SizedBox(height: 4),
+            Text(
+              getLocalText.s(
+                "Enable servers on the Servers tab — they become evolution seeds"),
               style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
             ),
           ],
