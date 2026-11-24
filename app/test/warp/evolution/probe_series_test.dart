@@ -49,7 +49,7 @@ void main() {
     expect(called, ['https://a', 'https://b']);
     expect(o.responded, isTrue);
     expect(o.colo, 'FRA');
-    expect(o.country, 'DE', reason: 'страна узла берётся из colo (§848)');
+    expect(o.country, 'GB', reason: 'страна узла берётся из loc= тела trace (§848)');
     expect(o.requests, 2);
     expect(o.rttMs, 42);
     expect(o.url, 'https://b');
