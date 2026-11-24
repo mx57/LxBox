@@ -757,6 +757,18 @@
   "About": {
     "value": "О приложении"
   },
+  "AI assistant control": {
+    "value": "Управление ИИ-ассистентом"
+  },
+  "AI assistants": {
+    "value": "ИИ-ассистенты"
+  },
+  "Edit the Source tab": {
+    "value": "Правьте вкладку Source"
+  },
+  "Let Android assistants turn the VPN on or off and read its status (Android 16+)": {
+    "value": "Ассистенты Android смогут включать и выключать VPN и узнавать его статус (Android 16+)"
+  },
   "Accept automation commands": {
     "value": "Принимать команды автоматизации"
   },
@@ -792,6 +804,103 @@
   },
   "Add DNS Server": {
     "value": "Добавить DNS-сервер"
+  },
+  "Add DNS server": {
+    "value": "Добавить DNS-сервер"
+  },
+  "Add all defaults": {
+    "value": "Добавить все стандартные"
+  },
+  "Custom server": {
+    "value": "Свой сервер"
+  },
+  "Domain regex": {
+    "value": "Regex домена"
+  },
+  "Enter an IP address": {
+    "value": "Введите IP-адрес"
+  },
+  "Fixed IP": {
+    "value": "Фиксированный IP"
+  },
+  "Go RE2, matched anywhere in the domain, e.g. %s": {
+    "value": "Go RE2, совпадение в любом месте домена, например %s"
+  },
+  "Go RE2, matched anywhere in the package name, e.g. %s": {
+    "value": "Go RE2, совпадение в любом месте имени пакета, например %s"
+  },
+  "How domains matched by this rule are resolved.": {
+    "value": "Как резолвятся домены, совпавшие с этим правилом."
+  },
+  "IP address": {
+    "value": "IP-адрес"
+  },
+  "IP addresses": {
+    "value": "IP-адреса"
+  },
+  "IP or CIDR, e.g. 1.2.3.0/24": {
+    "value": "IP или CIDR, например 1.2.3.0/24"
+  },
+  "Line %d: not an IPv4 or IPv6 address": {
+    "value": "Строка %d: не адрес IPv4 или IPv6"
+  },
+  "Look up the address before routing, so IP rules and the address family apply.": {
+    "value": "Узнать адрес до маршрутизации, чтобы сработали IP-правила и семейство адресов."
+  },
+  "Nodes in this source": {
+    "value": "Узлы этого источника"
+  },
+  "Non-negative integer": {
+    "value": "Неотрицательное целое число"
+  },
+  "One address per line, IPv4 or IPv6.": {
+    "value": "По адресу на строку, IPv4 или IPv6."
+  },
+  "Owner": {
+    "value": "Владелец"
+  },
+  "Package name regex": {
+    "value": "Regex имени пакета"
+  },
+  "Relay": {
+    "value": "Звено"
+  },
+  "Resolve before routing": {
+    "value": "Резолвить до маршрутизации"
+  },
+  "Shared with %d other apps — they are routed together": {
+    "value": {
+      "one": "UID общий ещё с %d приложением — маршрутизируются вместе",
+      "few": "UID общий ещё с %d приложениями — маршрутизируются вместе",
+      "many": "UID общий ещё с %d приложениями — маршрутизируются вместе",
+      "other": "UID общий ещё с %d приложениями — маршрутизируются вместе"
+    }
+  },
+  "Tap a node to rename it.": {
+    "value": "Нажмите на узел, чтобы переименовать его."
+  },
+  "Used when the rule resolves before routing.": {
+    "value": "Действуют, когда правило резолвит до маршрутизации."
+  },
+  "Your own UDP / DoT / DoH / group…": {
+    "value": "Свой UDP / DoT / DoH / группа…"
+  },
+  "From template": {
+    "value": "Из шаблона"
+  },
+  "Added \"%s\"": {
+    "value": "Добавлен «%s»"
+  },
+  "Added %d servers": {
+    "value": {
+      "one": "Добавлен %d сервер",
+      "few": "Добавлено %d сервера",
+      "many": "Добавлено %d серверов",
+      "other": "Добавлено %d сервера"
+    }
+  },
+  "All defaults are already in the list": {
+    "value": "Все стандартные серверы уже в списке"
   },
   "Add Wi-Fi network": {
     "value": "Добавить сеть Wi-Fi"
@@ -1150,6 +1259,252 @@
   "Building config...": {
     "value": "Сборка конфига…"
   },
+  "Comments will be removed": {
+    "value": "Комментарии будут удалены"
+  },
+  "DPD interval": {
+    "value": "Интервал DPD"
+  },
+  "Default (%s)": {
+    "value": "По умолчанию (%s)"
+  },
+  "Default (Off — folder)": {
+    "value": "По умолчанию (выключено — папка)"
+  },
+  "Default (Off — global)": {
+    "value": "По умолчанию (выключено — глобально)"
+  },
+  "Default (Off — subscription)": {
+    "value": "По умолчанию (выключено — подписка)"
+  },
+  "Default (On — folder)": {
+    "value": "По умолчанию (включено — папка)"
+  },
+  "Default (On — global)": {
+    "value": "По умолчанию (включено — глобально)"
+  },
+  "Default (On — subscription)": {
+    "value": "По умолчанию (включено — подписка)"
+  },
+  "Disable IPv6": {
+    "value": "Отключить IPv6"
+  },
+  "Disable SSO (external auth)": {
+    "value": "Отключить SSO (внешний вход)"
+  },
+  "Do not verify": {
+    "value": "Не проверять"
+  },
+  "Domain is required for QUIC.": {
+    "value": "Для QUIC домен обязателен."
+  },
+  "Empty = core default (FortiGate: Mozilla/5.0 SV1)": {
+    "value": "Пусто — значение ядра (FortiGate: Mozilla/5.0 SV1)"
+  },
+  "Empty = from gateway; lower it if HTTPS stalls (%1$s…%2$s)": {
+    "value": "Пусто — от шлюза; уменьшите, если HTTPS зависает (%1$s…%2$s)"
+  },
+  "Enter a duration like 500ms or 1s": {
+    "value": "Введите длительность, например 500ms или 1s"
+  },
+  "Failed to parse JSON: %s": {
+    "value": "Не удалось разобрать JSON: %s"
+  },
+  "Fallback delay": {
+    "value": "Резервная задержка"
+  },
+  "Fill in the required fields": {
+    "value": "Заполните обязательные поля"
+  },
+  "Format": {
+    "value": "Форматировать"
+  },
+  "FortiGate only": {
+    "value": "Только для FortiGate"
+  },
+  "Fragmentation is inherited from the folder level. If this server does not accept a split ClientHello, set it to Off here.": {
+    "value": "Фрагментация унаследована с уровня папки. Если этот сервер не принимает разрезанный ClientHello, поставьте здесь «Выключено»."
+  },
+  "Fragmentation is inherited from the global level. If this server does not accept a split ClientHello, set it to Off here.": {
+    "value": "Фрагментация унаследована с глобального уровня. Если этот сервер не принимает разрезанный ClientHello, поставьте здесь «Выключено»."
+  },
+  "Fragmentation is inherited from the subscription level. If this server does not accept a split ClientHello, set it to Off here.": {
+    "value": "Фрагментация унаследована с уровня подписки. Если этот сервер не принимает разрезанный ClientHello, поставьте здесь «Выключено»."
+  },
+  "Gateway": {
+    "value": "Шлюз"
+  },
+  "Generated by the core": {
+    "value": "Генерирует ядро"
+  },
+  "Group / Realm": {
+    "value": "Группа / Realm"
+  },
+  "Hostcheck": {
+    "value": "Hostcheck"
+  },
+  "How long to retry a dropped tunnel, e.g. 5m. Empty = core default (5m)": {
+    "value": "Сколько пытаться восстановить оборванный туннель, например 5m. Пусто — значение ядра (5m)"
+  },
+  "If the gateway asks for a code, you will be prompted on connect": {
+    "value": "Если шлюз попросит код, запрос появится при подключении"
+  },
+  "Importing adds the file's rules.": {
+    "value": "Импорт добавит правила из файла."
+  },
+  "Importing replaces the current %d rule(s).": {
+    "value": "Импорт заменит текущие правила: %d."
+  },
+  "Inherited: Off (folder)": {
+    "value": "Унаследовано: выключено (папка)"
+  },
+  "Inherited: Off (global)": {
+    "value": "Унаследовано: выключено (глобально)"
+  },
+  "Inherited: Off (subscription)": {
+    "value": "Унаследовано: выключено (подписка)"
+  },
+  "Inherited: On (folder)": {
+    "value": "Унаследовано: включено (папка)"
+  },
+  "Inherited: On (global)": {
+    "value": "Унаследовано: включено (глобально)"
+  },
+  "Inherited: On (subscription)": {
+    "value": "Унаследовано: включено (подписка)"
+  },
+  "Keep-alive probe period, e.g. 30s. Empty = from gateway": {
+    "value": "Период проверки связи, например 30s. Пусто — от шлюза"
+  },
+  "Masquerade": {
+    "value": "Маскировка"
+  },
+  "Masquerade domain": {
+    "value": "Домен маскировки"
+  },
+  "Masquerade is not supported for this source format.": {
+    "value": "Для этого формата источника маскировка не поддерживается."
+  },
+  "Masquerade is off: the node sets I1 explicitly, and I1 takes priority. Without I1 in Source this section becomes available.": {
+    "value": "Маскировка выключена: узел задаёт I1 явно, а I1 приоритетнее. Без I1 в источнике секция станет доступна."
+  },
+  "Masquerade protocol": {
+    "value": "Протокол маскировки"
+  },
+  "Mixed-case SNI": {
+    "value": "SNI в смешанном регистре"
+  },
+  "No decoy packets before the handshake.": {
+    "value": "Пакетов-приманок перед рукопожатием нет."
+  },
+  "Not a valid domain name.": {
+    "value": "Недопустимое доменное имя."
+  },
+  "This proxy carries only TCP connections. Nodes with a TCP transport work through it fully; UDP-based nodes (Hysteria2, TUIC, WireGuard) do not.": {
+    "value": "Этот прокси передаёт только TCP-соединения. Узлы с TCP-транспортом работают через него полностью, узлы на UDP (Hysteria2, TUIC, WireGuard) — нет."
+  },
+  "Not available: the node sets I2 explicitly.": {
+    "value": "Недоступно: узел задаёт I2 явно."
+  },
+  "Nothing to import: the file has no rules, directions or settings.": {
+    "value": "Импортировать нечего: в файле нет правил, Направлений и настроек."
+  },
+  "On": {
+    "value": "Включено"
+  },
+  "Only for old gateways (TLS 1.0)": {
+    "value": "Только для старых шлюзов (TLS 1.0)"
+  },
+  "Only if it differs from the server host": {
+    "value": "Только если отличается от хоста сервера"
+  },
+  "Override the global TLS settings for all servers of this folder. Not applied to servers with a detour.": {
+    "value": "Переопределяет глобальные настройки TLS для всех серверов этой папки. К серверам с detour не применяется."
+  },
+  "Override the global TLS settings for all servers of this subscription. Not applied to servers with a detour.": {
+    "value": "Переопределяет глобальные настройки TLS для всех серверов этой подписки. К серверам с detour не применяется."
+  },
+  "Override the global TLS settings for this server.": {
+    "value": "Переопределяет глобальные настройки TLS для этого сервера."
+  },
+  "Override the global TLS settings for this server. Not applied if the server has a detour.": {
+    "value": "Переопределяет глобальные настройки TLS для этого сервера. К серверу с detour не применяется."
+  },
+  "Password": {
+    "value": "Пароль"
+  },
+  "Pinned fingerprint": {
+    "value": "Закреплённый отпечаток"
+  },
+  "Reconnect timeout": {
+    "value": "Время переподключения"
+  },
+  "Required": {
+    "value": "Обязательно"
+  },
+  "Security": {
+    "value": "Безопасность"
+  },
+  "Server certificate": {
+    "value": "Сертификат сервера"
+  },
+  "Several values: comma-separated": {
+    "value": "Несколько значений — через запятую"
+  },
+  "System CA": {
+    "value": "Системные CA"
+  },
+  "TCP only (no DTLS)": {
+    "value": "Только TCP (без DTLS)"
+  },
+  "Use when UDP is blocked and the tunnel keeps dropping": {
+    "value": "Если UDP заблокирован и туннель постоянно рвётся"
+  },
+  "Username": {
+    "value": "Имя пользователя"
+  },
+  "e.g. 5s, 500ms": {
+    "value": "например 5s, 500ms"
+  },
+  "host:port or full URL; port 443 if omitted": {
+    "value": "host:port или полный URL; без порта — 443"
+  },
+  "replaced %d rule(s)": {
+    "value": "заменено правил: %d"
+  },
+  "Source has unsaved changes.": {
+    "value": "В источнике есть несохранённая правка."
+  },
+  "Split ClientHello into TCP segments": {
+    "value": "Разбивать ClientHello на TCP-сегменты"
+  },
+  "Split handshake into TLS records": {
+    "value": "Разбивать рукопожатие на TLS-записи"
+  },
+  "System HTTP proxy": {
+    "value": "Системный HTTP-прокси"
+  },
+  "The STUN decoy carries no domain.": {
+    "value": "Приманка STUN домена не несёт."
+  },
+  "The domain goes into the SNI of the decoy QUIC ClientHello. Required.": {
+    "value": "Домен уходит в SNI ClientHello приманки QUIC. Обязателен."
+  },
+  "The domain is the DNS query name, visible on the wire. Empty: the core makes up a name.": {
+    "value": "Домен — имя в DNS-запросе, виден на проводе. Пусто — имя придумывает ядро."
+  },
+  "The domain is the SIP request host, visible on the wire. Empty: the core makes up a name.": {
+    "value": "Домен — host SIP-запроса, виден на проводе. Пусто — имя придумывает ядро."
+  },
+  "The masquerade keys in Source are ignored.": {
+    "value": "Ключи маскировки в источнике не учитываются."
+  },
+  "This file has no rules. The current rules stay.": {
+    "value": "В файле нет правил. Текущие правила останутся."
+  },
+  "This source is a packed link. Masquerade can be changed after Edit JSON turns the node into JSON.": {
+    "value": "Источник — упакованная ссылка. Маскировку можно менять, когда кнопка «Изменить» на вкладке JSON переведёт узел в JSON."
+  },
   "by Domain": {
     "value": "по домену"
   },
@@ -1188,6 +1543,18 @@
   },
   "Caps the VPN core's memory. A cap that is too low keeps the processor busy with garbage collection and heats the phone. Auto sizes the cap to this device's RAM; Off removes the cap but keeps low-memory monitoring. Applies immediately.": {
     "value": "Ограничивает память ядра VPN. Слишком низкий лимит занимает процессор сборкой мусора и греет телефон. «Авто» подбирает лимит под объём памяти устройства; «Выключено» снимает лимит, но сохраняет контроль нехватки памяти. Применяется сразу."
+  },
+  "Memory threshold for the VPN core itself (its Go runtime), not the whole app process. Above the threshold the core drops its connections and frees memory, and near it the garbage collector keeps the processor busy and heats the phone. Auto sets no threshold. With any value the core also watches the system's free memory. Applies immediately. The current figure is in Statistics → Memory → Core memory.": {
+    "value": "Порог памяти для самого ядра VPN (его рантайма Go), а не для всего процесса приложения. Выше порога ядро сбрасывает свои соединения и освобождает память, а вблизи него сборщик мусора занимает процессор и греет телефон. «Авто» порог не ставит. При любом значении ядро следит и за свободной памятью системы. Применяется сразу. Текущая цифра — в «Статистика» → «Память» → «Память ядра»."
+  },
+  "Core default": {
+    "value": "По умолчанию ядра"
+  },
+  "Core memory": {
+    "value": "Память ядра"
+  },
+  "Memory of the VPN core itself (Go runtime); the limit from VPN Settings applies to this figure. RSS is the whole app process.": {
+    "value": "Память самого ядра VPN (рантайм Go); к этой цифре применяется лимит из настроек VPN. RSS — весь процесс приложения."
   },
   "Capture %s": {
     "value": "Снять %s"
@@ -2713,6 +3080,12 @@
   "JSON must be an outbound object with \"type\" or a document with \"endpoints\"/\"outbounds\"": {
     "value": "JSON должен быть объектом outbound с «type» или документом с «endpoints»/«outbounds»"
   },
+  "INI copied": {
+    "value": "INI скопирован"
+  },
+  "JSON must be a sing-box or Xray outbound, or a document with outbounds/endpoints": {
+    "value": "JSON должен быть outbound sing-box или Xray либо документом с outbounds/endpoints"
+  },
   "JSON or JSON5 (// and /* */ comments)": {
     "value": "JSON или JSON5 (комментарии // и /* */)"
   },
@@ -3282,6 +3655,12 @@
   "Two columns on wide screens": {
     "value": "Две колонки на широком экране"
   },
+  "System colors": {
+    "value": "Системные цвета"
+  },
+  "Use the accent color from your wallpaper (Material You, Android 12+).": {
+    "value": "Брать акцентный цвет из обоев (Material You, Android 12+)."
+  },
   "unknown error": {
     "value": "неизвестная ошибка"
   },
@@ -3446,8 +3825,8 @@
   "Only single servers can be moved": {
     "value": "Переносить можно только одиночные серверы"
   },
-  "Only the node is saved. The rest of the input is not kept.": {
-    "value": "Сохранён только узел. Остальное содержимое не сохранено."
+  "Only the nodes are saved. The rest of the input is not kept.": {
+    "value": "Сохранены только узлы. Остальное содержимое не сохранено."
   },
   "Open": {
     "value": "Открыть"
@@ -3592,6 +3971,15 @@
   },
   "Pick file...": {
     "value": "Выбрать файл…"
+  },
+  "Choose the file again": {
+    "value": "Выберите файл заново"
+  },
+  "This subscription was added from a file, and the file is not on this device. A backup keeps subscription settings, not their contents, and Android does not let the app read the file again. Choose the file again to load its servers.": {
+    "value": "Эта подписка добавлена из файла, а самого файла на устройстве нет. Резервная копия хранит настройки подписок, а не их содержимое, а Android не даёт приложению прочитать файл ещё раз. Выберите файл заново, чтобы загрузить серверы."
+  },
+  "The file of this subscription is not on this device. Choose it again in Edit source": {
+    "value": "Файла этой подписки на устройстве нет. Выберите его заново в «Изменить источник»"
   },
   "Pin AUTO to top": {
     "value": "Закреплять AUTO сверху"
@@ -5202,6 +5590,9 @@
   "Xray config": {
     "value": "Конфиг Xray"
   },
+  "Xray JSON: kept as written; the app translates it for the core.": {
+    "value": "Xray JSON: хранится как написан; ядру его переводит приложение."
+  },
   "Yellow up to, ms": {
     "value": "Жёлтый до, мс"
   },
@@ -5912,5 +6303,708 @@
   },
   "All probed endpoints": {
     "value": "Все проверенные адреса"
+  },
+  "Scan code": {
+    "value": "Сканировать код"
+  },
+  "Scan the code shown by LxBox on your TV to send the categories selected under Export over the local network. Both devices must be on the same network.": {
+    "value": "Отсканируйте код, который показывает LxBox на телевизоре, чтобы отправить по локальной сети категории, отмеченные в разделе «Экспорт». Оба устройства должны быть в одной сети."
+  },
+  "Send": {
+    "value": "Отправить"
+  },
+  "Send to %s?": {
+    "value": "Отправить на %s?"
+  },
+  "Send to TV": {
+    "value": "Отправить на TV"
+  },
+  "Sending failed: %s": {
+    "value": "Не удалось отправить: %s"
+  },
+  "Sending failed: HTTP %d": {
+    "value": "Не удалось отправить: HTTP %d"
+  },
+  "Sent. Confirm the restore on the TV.": {
+    "value": "Отправлено. Подтвердите восстановление на телевизоре."
+  },
+  "Show a code on this TV and scan it with LxBox on your phone. The phone sends its settings over the local network; you confirm them here before they apply.": {
+    "value": "Покажите код на этом телевизоре и отсканируйте его в LxBox на телефоне. Телефон отправит настройки по локальной сети, а применятся они только после подтверждения здесь."
+  },
+  "Show code": {
+    "value": "Показать код"
+  },
+  "The TV cannot restore these settings: %s": {
+    "value": "Телевизор не может восстановить эти настройки: %s"
+  },
+  "The TV did not accept the code. Show a new code on the TV and scan it again.": {
+    "value": "Телевизор не принял код. Покажите на телевизоре новый код и отсканируйте его снова."
+  },
+  "The code has expired or was already used. Show a new code on the TV.": {
+    "value": "Код истёк или уже использован. Покажите на телевизоре новый код."
+  },
+  "The code has expired. Press New code to get another one.": {
+    "value": "Код истёк. Нажмите «Новый код», чтобы получить другой."
+  },
+  "The phone sent settings that cannot be restored: %s": {
+    "value": "Телефон прислал настройки, которые нельзя восстановить: %s"
+  },
+  "The selected categories are encrypted with the key from the code and sent over the local network. The TV shows what arrived and asks before applying it.": {
+    "value": "Отмеченные категории шифруются ключом из кода и отправляются по локальной сети. Телевизор покажет, что пришло, и спросит перед применением."
+  },
+  "The settings are too large to send.": {
+    "value": "Настройки слишком большие для отправки."
+  },
+  "This is not a LxBox transfer code": {
+    "value": "Это не код передачи LxBox"
+  },
+  "Too many attempts with a wrong code. The code is closed; press New code to get another one.": {
+    "value": "Слишком много попыток с чужим кодом. Код закрыт; нажмите «Новый код», чтобы получить другой."
+  },
+  "Waiting for the phone…": {
+    "value": "Ждём телефон…"
+  },
+  "The TV is busy with another request. Try again in a moment.": {
+    "value": "Телевизор занят другим запросом. Попробуйте ещё раз чуть позже."
+  },
+  "Cannot move: \"%s\" includes \"%s\"": {
+    "value": "Нельзя переместить: «%s» включает «%s»"
+  },
+  "Locked: used by %s. Remove the reference first.": {
+    "value": "Заблокировано, используется: %s. Сначала уберите ссылку."
+  },
+  "Duplicate": {
+    "value": "Дублировать"
+  },
+  "Save as copy": {
+    "value": "Сохранить как копию"
+  },
+  "%s (copy)": {
+    "value": "%s (копия)"
+  },
+  "Changing the tag creates a custom copy. The original server stays in the list.": {
+    "value": "Смена тега создаёт собственную копию. Исходный сервер остаётся в списке."
+  },
+  "Resolver goes through a tunnel": {
+    "value": "Резолвер ходит через туннель"
+  },
+  "This resolver sends queries through %s. It is used to look up server addresses while the connection is being set up, before the tunnel exists, so lookups can fail and the VPN may not connect. A direct resolver is the safest choice; for privacy pick a DoT or DoH server.": {
+    "value": "Этот резолвер отправляет запросы через %s. Он ищет адреса серверов, пока соединение устанавливается и туннеля ещё нет, поэтому запросы могут не пройти и VPN может не подключиться. Надёжнее всего прямой резолвер; для приватности выберите сервер DoT или DoH."
+  },
+  "Members are resolved at build time": {
+    "value": "Состав определяется при сборке"
+  },
+  "· %s off": {
+    "value": "· %s выкл."
+  },
+  "Source is not a JSON object.": {
+    "value": "В источнике не JSON-объект."
+  },
+  "\"kind\" must be \"auto\".": {
+    "value": "Значение «kind» должно быть «auto»."
+  },
+  "Unknown keys: %s": {
+    "value": "Незнакомые ключи: %s"
+  },
+  "Enter an http or https URL": {
+    "value": "Введите адрес http или https"
+  },
+  "VPN is not running": {
+    "value": "VPN не запущен"
+  },
+  "example.com or https://…": {
+    "value": "example.com или https://…"
+  },
+  "Any app": {
+    "value": "Любое приложение"
+  },
+  "Full": {
+    "value": "Полностью"
+  },
+  "Route": {
+    "value": "Маршрут"
+  },
+  "From scratch": {
+    "value": "С нуля"
+  },
+  "Bypass DNS cache and open new connections": {
+    "value": "Мимо кэша DNS, с новыми соединениями"
+  },
+  "Start VPN to run a check": {
+    "value": "Запустите VPN, чтобы проверить"
+  },
+  "Stopped": {
+    "value": "Остановлено"
+  },
+  "Too many checks running, try again": {
+    "value": "Слишком много проверок сразу, повторите позже"
+  },
+  "Failed at %s: %s": {
+    "value": "Сбой на %s: %s"
+  },
+  "HTTP %d · %d ms": {
+    "value": "HTTP %d · %d мс"
+  },
+  "Completed · %d ms": {
+    "value": "Готово · %d мс"
+  },
+  "trace truncated": {
+    "value": "трасса обрезана"
+  },
+  "Skipped": {
+    "value": "Пропущено"
+  },
+  "Reused": {
+    "value": "Использовано готовое"
+  },
+  "Sent, not confirmed": {
+    "value": "Отправлено, без подтверждения"
+  },
+  "Not evaluated": {
+    "value": "Не вычислено"
+  },
+  "This app does not go through the VPN. The path shown is hypothetical": {
+    "value": "Это приложение не идёт через VPN. Показанный путь условный"
+  },
+  "The server address is resolved by DNS rules for this app; for another app the path may differ": {
+    "value": "Адрес сервера резолвится правилами DNS для этого приложения; у другого приложения путь может быть иным"
+  },
+  "The path depends on a server that is not on the route": {
+    "value": "Путь зависит от сервера, которого нет в маршруте"
+  },
+  "Resolve cycle: a server address is resolved through itself": {
+    "value": "Цикл резолва: адрес сервера резолвится через него же"
+  },
+  "IP rules were not evaluated: the address is unknown": {
+    "value": "Правила по IP не проверены: адрес неизвестен"
+  },
+  "Fake IP is not kept across restarts: apps with cached addresses fail after a restart": {
+    "value": "Fake IP не сохраняется между перезапусками: приложения с закэшированными адресами после перезапуска получают отказ"
+  },
+  "The fake IP pool wraps faster than the answer TTL: an old address may now belong to another domain": {
+    "value": "Пул fake IP проходит круг быстрее TTL ответа: старый адрес может уже принадлежать другому домену"
+  },
+  "The address is in the fake IP range but has no record": {
+    "value": "Адрес из диапазона fake IP, но записи о нём нет"
+  },
+  "The address now belongs to another domain": {
+    "value": "Адрес сейчас принадлежит другому домену"
+  },
+  "IPv6 fake IP is returned, but the tunnel has no IPv6 address": {
+    "value": "Возвращается IPv6 fake IP, но у туннеля нет IPv6-адреса"
+  },
+  "HTTPS DNS queries are rejected: no ECH and no ALPN hints for the app": {
+    "value": "DNS-запросы HTTPS отклоняются: приложение не получит ECH и подсказки ALPN"
+  },
+  "UDP 443 is rejected: browsers fall back to TCP": {
+    "value": "UDP 443 отклоняется: браузеры переходят на TCP"
+  },
+  "The REALITY server did not recognize the client: check public key, short ID, server name": {
+    "value": "Сервер REALITY не узнал клиента: проверьте public key, short ID, имя сервера"
+  },
+  "The connection broke after an unconfirmed step: wrong UUID or password, the server cannot reach the target, or large packets are lost": {
+    "value": "Соединение оборвалось после неподтверждённого шага: неверный UUID или пароль, сервер не достучался до цели или теряются большие пакеты"
+  },
+  "Some steps were reused: this does not prove the path comes up from scratch": {
+    "value": "Часть шагов взята готовой: это не доказывает, что путь поднимается с нуля"
+  },
+  "URL Check": {
+    "value": "Проверка URL"
+  },
+  "URL check and speed test": {
+    "value": "Проверка URL и скорости"
+  },
+  "No records": {
+    "value": "Записей нет"
+  },
+  "Authority": {
+    "value": "Authority"
+  },
+  "Not run": {
+    "value": "Не выполнялся"
+  },
+  "Not run: %s failed": {
+    "value": "Не выполнялся: сбой на %s"
+  },
+  "Reused: an open connection or a cached answer": {
+    "value": "Повторно: открытое соединение или ответ из кэша"
+  },
+  "Sent; the protocol gives no confirmation": {
+    "value": "Отправлено; протокол не даёт подтверждения"
+  },
+  "From the network": {
+    "value": "Из сети"
+  },
+  "From cache": {
+    "value": "Из кэша"
+  },
+  "expired, refreshing": {
+    "value": "просрочен, обновляется"
+  },
+  "Local answer: fake IP or hosts": {
+    "value": "Локальный ответ: fake IP или hosts"
+  },
+  "DNS query the app makes for the site": {
+    "value": "DNS-запрос приложения к адресу сайта"
+  },
+  "Routing rule match: which outbound takes the connection": {
+    "value": "Выбор правила маршрута: какой outbound берёт соединение"
+  },
+  "Node selection inside a group": {
+    "value": "Выбор узла в группе"
+  },
+  "Chain unfolded into its nodes": {
+    "value": "Цепочка, развёрнутая в узлы"
+  },
+  "Connection through a node": {
+    "value": "Соединение через узел"
+  },
+  "Hand-off to the detour that carries this node": {
+    "value": "Передача в detour, через который идёт этот узел"
+  },
+  "Resolving the server address of a node or DNS server": {
+    "value": "Резолв адреса сервера узла или DNS-сервера"
+  },
+  "Query to a DNS server": {
+    "value": "Запрос к DNS-серверу"
+  },
+  "Waking an endpoint that was idle-suspended": {
+    "value": "Пробуждение endpoint, усыплённого по простою"
+  },
+  "TCP connection to the server": {
+    "value": "TCP-соединение с сервером"
+  },
+  "QUIC connection to the server": {
+    "value": "QUIC-соединение с сервером"
+  },
+  "TLS handshake with the server": {
+    "value": "TLS-рукопожатие с сервером"
+  },
+  "REALITY check: did the server recognize the client": {
+    "value": "Проверка REALITY: узнал ли сервер клиента"
+  },
+  "Transport over TLS: WS, gRPC, XHTTP, HTTPUpgrade or H2": {
+    "value": "Транспорт поверх TLS: WS, gRPC, XHTTP, HTTPUpgrade или H2"
+  },
+  "Authentication: the server confirms the credentials": {
+    "value": "Аутентификация: сервер подтверждает учётные данные"
+  },
+  "WireGuard handshake with the peer": {
+    "value": "Рукопожатие WireGuard с пиром"
+  },
+  "Protocol header to the server; this protocol sends no confirmation": {
+    "value": "Заголовок протокола серверу; этот протокол не присылает подтверждения"
+  },
+  "TLS with the site itself, through the tunnel": {
+    "value": "TLS с самим сайтом через туннель"
+  },
+  "First bytes of the site's response": {
+    "value": "Первые байты ответа сайта"
+  },
+  "HTTP response of the site": {
+    "value": "HTTP-ответ сайта"
+  },
+  "From cache, %s old": {
+    "value": "Из кэша, возраст %s"
+  },
+  "UDP socket to the server; UDP has no handshake to confirm": {
+    "value": "UDP-сокет к серверу; у UDP нет рукопожатия, подтверждать нечего"
+  },
+  "No records: the core answered without asking a DNS server (a rule or the domain strategy)": {
+    "value": "Записей нет: ядро ответило, не спрашивая DNS-сервер (правило или стратегия домена)"
+  },
+  "No HTTP response · %d ms": {
+    "value": "Нет HTTP-ответа · %d мс"
+  },
+  "Connection to the DNS server, already open: idle in the pool or opened by a parallel query": {
+    "value": "Соединение с DNS-сервером, уже открытое: из пула или открытое параллельным запросом"
+  },
+  "Cut short: a parallel attempt answered first": {
+    "value": "Прервано: параллельная попытка ответила раньше"
+  },
+  "Lost the race: %s answered first": {
+    "value": "Проиграл гонку: %s ответил раньше"
+  },
+  "Query to one server of a DNS group": {
+    "value": "Запрос к одному серверу DNS-группы"
+  },
+  "One per line, or pick from the list": {
+    "value": "По одному на строку или выберите из списка"
+  },
+  "No members left in the list. Enable or add a member first.": {
+    "value": "В списке не осталось участников. Сначала включите или добавьте участника."
+  },
+  "Reset to template": {
+    "value": "Сбросить к шаблону"
+  },
+  "Also added: %s": {
+    "value": "Добавлены также: %s"
+  },
+  "A group needs at least one member.": {
+    "value": "Группе нужен хотя бы один участник."
+  },
+  "Hosts": {
+    "value": "Hosts"
+  },
+  "Fixed addresses for chosen names, answered on the device": {
+    "value": "Заданные адреса для выбранных имён, ответ — на устройстве"
+  },
+  "Add host": {
+    "value": "Добавить запись"
+  },
+  "Also reads: %s": {
+    "value": "Также читает: %s"
+  },
+  "Answers only these names. Put it under Hosts of a DNS group so that other names go to the group's servers.": {
+    "value": "Отвечает только на эти имена. Поставьте его в Hosts DNS-группы — остальные имена уйдут её серверам."
+  },
+  "Addresses": {
+    "value": "Адреса"
+  },
+  "Enter a name": {
+    "value": "Введите имя"
+  },
+  "No spaces, \"/\" or \":\" in a name": {
+    "value": "В имени не должно быть пробелов, «/» и «:»"
+  },
+  "\"%s\" is already in the list": {
+    "value": "«%s» уже есть в списке"
+  },
+  "Add at least one host": {
+    "value": "Добавьте хотя бы одну запись"
+  },
+  "No hosts servers in the list.": {
+    "value": "В списке нет серверов hosts."
+  },
+  "Names these servers know are answered first; other names go to the members.": {
+    "value": "Имена, которые знают эти серверы, отвечаются сразу; остальные уходят участникам."
+  },
+  "1 name": {
+    "value": "1 имя"
+  },
+  "%d names": {
+    "value": {
+      "one": "%d имя",
+      "few": "%d имени",
+      "many": "%d имён",
+      "other": "%d имени"
+    }
+  },
+  "DNS group \"%s\" cannot contain itself.": {
+    "value": "DNS-группа «%s» не может содержать саму себя."
+  },
+  "DNS group \"%1$s\": server \"%2$s\" is listed in both servers and hosts.": {
+    "value": "DNS-группа «%1$s»: сервер «%2$s» указан и в servers, и в hosts."
+  },
+  "DNS group \"%1$s\": duplicate hosts server \"%2$s\".": {
+    "value": "DNS-группа «%1$s»: сервер hosts «%2$s» указан дважды."
+  },
+  "DNS group \"%1$s\": hosts server \"%2$s\" not found.": {
+    "value": "DNS-группа «%1$s»: сервер hosts «%2$s» не найден."
+  },
+  "DNS group \"%1$s\": hosts accepts only servers of type hosts, got \"%3$s\": \"%2$s\".": {
+    "value": "DNS-группа «%1$s»: в hosts допустимы только серверы типа hosts, а «%2$s» — типа «%3$s»."
+  },
+  "Node filter": {
+    "value": "Фильтр узлов"
+  },
+  "%1$s / %2$s match": {
+    "value": "совпало %1$s из %2$s"
+  },
+  "Open picker": {
+    "value": "Открыть подбор"
+  },
+  "Mixins": {
+    "value": "Миксины"
+  },
+  "Mixin": {
+    "value": "Миксин"
+  },
+  "Add mixin": {
+    "value": "Добавить миксин"
+  },
+  "Delete mixin?": {
+    "value": "Удалить миксин?"
+  },
+  "Edits applied to the built config, top to bottom. They survive rebuilds.": {
+    "value": "Правки собранного конфига, применяются сверху вниз. Переживают пересборку."
+  },
+  "Target": {
+    "value": "Цель"
+  },
+  "Suggestions": {
+    "value": "Подсказки"
+  },
+  "Whole node": {
+    "value": "Узел целиком"
+  },
+  "Keys": {
+    "value": "Ключи"
+  },
+  "Keys, comma-separated": {
+    "value": "Ключи через запятую"
+  },
+  "Preview": {
+    "value": "Предпросмотр"
+  },
+  "(root)": {
+    "value": "(корень)"
+  },
+  "No config built yet": {
+    "value": "Конфиг ещё не собран"
+  },
+  "✓ 1 match": {
+    "value": "✓ 1 совпадение"
+  },
+  "✗ no match": {
+    "value": "✗ нет совпадений"
+  },
+  "✗ needs a single list": {
+    "value": "✗ нужен один список"
+  },
+  "✗ not a list element": {
+    "value": "✗ не элемент списка"
+  },
+  "✗ syntax: %s": {
+    "value": "✗ синтаксис: %s"
+  },
+  "%s → before first": {
+    "value": "%s → перед первым"
+  },
+  "%s → after last": {
+    "value": "%s → после последнего"
+  },
+  "✓ %d matches": {
+    "value": {
+      "one": "✓ %d совпадение",
+      "few": "✓ %d совпадения",
+      "many": "✓ %d совпадений",
+      "other": "✓ %d совпадения"
+    }
+  },
+  "Replace key": {
+    "value": "Заменить ключ"
+  },
+  "Saved: %s": {
+    "value": "Записано: %s"
+  },
+  "Key saved. It applies when the VPN starts.": {
+    "value": "Ключ сохранён. Он применится при запуске VPN."
+  },
+  "Applies when the node is online.": {
+    "value": "Применится, когда узел будет в сети."
+  },
+  "Signing in with the new key…": {
+    "value": "Вход с новым ключом…"
+  },
+  "Send file…": {
+    "value": "Отправить файл…"
+  },
+  "Sending to %s": {
+    "value": "Отправка на %s"
+  },
+  "Couldn't send: %s": {
+    "value": "Не удалось отправить: %s"
+  },
+  "the VPN is off": {
+    "value": "VPN выключен"
+  },
+  "can't read the file": {
+    "value": "не удалось прочитать файл"
+  },
+  "no file picker on this device": {
+    "value": "на устройстве нет выбора файлов"
+  },
+  "Inbox": {
+    "value": "Входящие"
+  },
+  "File sharing is off for this tailnet. Turn on Taildrop in the Tailscale admin console.": {
+    "value": "В этой сети tailnet обмен файлами выключен. Включите Taildrop в админке Tailscale."
+  },
+  "%s of %s": {
+    "value": "%s из %s"
+  },
+  "from %s": {
+    "value": "от %s"
+  },
+  "Saved to Downloads": {
+    "value": "Сохранено в Загрузки"
+  },
+  "Couldn't save: %s": {
+    "value": "Не удалось сохранить: %s"
+  },
+  "Couldn't delete: %s": {
+    "value": "Не удалось удалить: %s"
+  },
+  "Couldn't cancel: %s": {
+    "value": "Не удалось отменить: %s"
+  },
+  "Turn the node on first.": {
+    "value": "Сначала включите узел."
+  },
+  "Could not sign in with the new key.": {
+    "value": "Не удалось войти с новым ключом."
+  },
+  "Restart node": {
+    "value": "Перезапустить узел"
+  },
+  "Node restarted.": {
+    "value": "Узел перезапущен."
+  },
+  "Save received files to Downloads": {
+    "value": "Сохранять принятые файлы в Загрузки"
+  },
+  "Needs Android 10 or later.": {
+    "value": "Нужен Android 10 или новее."
+  },
+  "Allow Taildrop (send and receive files)": {
+    "value": "Разрешить Taildrop (отправка и приём файлов)"
+  },
+  "Taildrop is off for this node.": {
+    "value": "Taildrop у этого узла выключен."
+  },
+  "Accept clipboard and links from my devices": {
+    "value": "Принимать буфер обмена и ссылки с моих устройств"
+  },
+  "Devices shared by other users are not counted as yours.": {
+    "value": "Устройства, которыми поделились другие пользователи, вашими не считаются."
+  },
+  "Core: lx.wg.idle_suspend. An idle WireGuard endpoint that is not on the active route is torn down and rebuilt on its next dial.": {
+    "value": "Ядро: lx.wg.idle_suspend. Простаивающий эндпоинт WireGuard вне активного маршрута разбирается и собирается заново при следующем подключении."
+  },
+  "Core: lx.wg.idle_suspend_reachable. The same sleep for endpoints on the active route, after a longer quiet period.": {
+    "value": "Ядро: lx.wg.idle_suspend_reachable. Такой же сон для эндпоинтов на активном маршруте, после более долгого простоя."
+  },
+  "Core: lx.wg.lazy_build. An endpoint is built on its first dial instead of at core start.": {
+    "value": "Ядро: lx.wg.lazy_build. Эндпоинт собирается при первом подключении, а не на старте ядра."
+  },
+  "Core: lx.wg.build_max. Over the limit the endpoint idle for the longest is torn down.": {
+    "value": "Ядро: lx.wg.build_max. Сверх лимита разбирается эндпоинт, простаивающий дольше всех."
+  },
+  "Core: lx.mtu_align. A node over a tunnel gets a packet size that fits into it: mtu for WireGuard and MASQUE, the initial packet size for Hysteria2 and TUIC. Values are never raised.": {
+    "value": "Ядро: lx.mtu_align. Узел поверх туннеля получает размер пакета, который в туннель влезает: mtu у WireGuard и MASQUE, начальный размер пакета у Hysteria2 и TUIC. Значения никогда не повышаются."
+  },
+  "Core: lx.masque.idle_timeout. The idle window for MASQUE nodes that have no idle_timeout of their own.": {
+    "value": "Ядро: lx.masque.idle_timeout. Окно простоя для узлов MASQUE без собственного idle_timeout."
+  },
+  "File sharing is off in this tailnet.": {
+    "value": "Отправка файлов выключена в этом tailnet."
+  },
+  "Device is offline.": {
+    "value": "Устройство не в сети."
+  },
+  "Device belongs to another user.": {
+    "value": "Устройство принадлежит другому пользователю."
+  },
+  "Device can't receive files.": {
+    "value": "Устройство не принимает файлы."
+  },
+  "online": {
+    "value": "в сети"
+  },
+  "VPN notification buttons": {
+    "value": "Кнопки уведомления VPN"
+  },
+  "Restart": {
+    "value": "Рестарт"
+  },
+  "Appears only while a Tailscale node has Allow Taildrop.": {
+    "value": "Есть, только пока у узла Tailscale включён Allow Taildrop."
+  },
+  "no route": {
+    "value": "нет маршрута"
+  },
+  "Wi-Fi": {
+    "value": "Wi-Fi"
+  },
+  "Mobile": {
+    "value": "Мобильная сеть"
+  },
+  "Ethernet": {
+    "value": "Ethernet"
+  },
+  "Other": {
+    "value": "Другая"
+  },
+  "No network": {
+    "value": "Нет сети"
+  },
+  "MTU %s": {
+    "value": "MTU %s"
+  },
+  "MTU unknown": {
+    "value": "MTU неизвестен"
+  },
+  "ok %s ms": {
+    "value": "ок %s мс"
+  },
+  "no reply": {
+    "value": "нет ответа"
+  },
+  "does not fit the interface": {
+    "value": "не влезает в интерфейс"
+  },
+  "Path MTU %s": {
+    "value": "Path MTU %s"
+  },
+  "Nothing is cut on the way": {
+    "value": "По пути ничего не режется"
+  },
+  "Network drops packets above %s": {
+    "value": "Сеть роняет пакеты больше %s"
+  },
+  "Path MTU below %s": {
+    "value": "Path MTU ниже %s"
+  },
+  "Even a minimum-size packet does not get through": {
+    "value": "Не проходит даже пакет минимального размера"
+  },
+  "Target does not answer ping": {
+    "value": "Цель не отвечает на ping"
+  },
+  "Interface": {
+    "value": "Интерфейс"
+  },
+  "Recommended tunnel MTU": {
+    "value": "Рекомендуемый MTU туннеля"
+  },
+  "Probes (%s)": {
+    "value": "Пробы (%s)"
+  },
+  "Path MTU": {
+    "value": "Path MTU"
+  },
+  "Largest packet that reaches the target unfragmented. Probes bypass the tunnel.": {
+    "value": "Наибольший пакет, который доходит до цели без фрагментации. Пробы идут мимо туннеля."
+  },
+  "IP address or host name": {
+    "value": "IP-адрес или имя хоста"
+  },
+  "Enter an http:// or https:// address": {
+    "value": "Введите адрес http:// или https://"
+  },
+  "Not applied: traffic goes through a detour first. There the core's sniff guard decides (Core settings).": {
+    "value": "Не применяется: трафик сначала идёт через detour. Там решает защита от сниффинга ядра (настройки Core)."
+  },
+  "Core: lx.sniff_guard.tls. A relay or router that sniffs TLS (Xray destOverride without routeOnly) redirects the connection by the SNI of the ClientHello; a node with a masked SNI then looks dead. Paths through direct, SSH and SOCKS start unprotected, other relays start protected; the core switches a path when a node fails one way and connects the other.": {
+    "value": "Ядро: lx.sniff_guard.tls. Релей или роутер, который сниффит TLS (Xray destOverride без routeOnly), перенаправляет соединение по SNI из ClientHello; узел с маскировочным SNI при этом выглядит мёртвым. Пути напрямую, через SSH и SOCKS стартуют без защиты, через остальные релеи — с защитой; ядро переключает путь, когда узел одним способом упал, а другим подключился."
+  },
+  "Core: lx.sniff_guard.quic. The same for the first QUIC packet. Never applied through a SOCKS relay. AmneziaWG follows what other QUIC nodes on the same path have taught the core.": {
+    "value": "Ядро: lx.sniff_guard.quic. То же для первого пакета QUIC. Через SOCKS-релей не применяется никогда. AmneziaWG следует тому, чему ядро научили другие QUIC-узлы на том же пути."
+  },
+  "Detour is not applied in the test — the node is checked directly.": {
+    "value": "Detour в тесте не учитывается — узел проверяется напрямую."
+  },
+  "Detour is not applied in the test — nodes are checked directly.": {
+    "value": "Detour в тесте не учитывается — узлы проверяются напрямую."
+  },
+  "Tested through %s.": {
+    "value": "Тест идёт через %s."
+  },
+  "Tested through each node's own detour.": {
+    "value": "Тест идёт через detour каждого узла."
+  },
+  "Detour is applied in the test for %d of %d; the others are checked directly.": {
+    "value": "Detour учтён в тесте у %d из %d; остальные проверяются напрямую."
   }
 }

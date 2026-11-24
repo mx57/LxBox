@@ -57,6 +57,13 @@ Widget? buildSubscriptionEntrySubtitle(
       statusText = node != null
           ? getLocalText.s("%s server", node.protocol.toUpperCase())
           : '';
+      // §722 D — запись из нескольких узлов (владелец + звенья): число
+      // узлов, как «N hops» у строки цепочки.
+      final count = recordNodesOf(entry.list.nodes).length;
+      if (count > 1) {
+        final nodesText = getLocalText.plural("%d nodes", count);
+        statusText = statusText.isEmpty ? nodesText : '$statusText · $nodesText';
+      }
     } else {
       statusText = '';
     }
@@ -80,6 +87,12 @@ Widget? buildSubscriptionEntrySubtitle(
             key: const ValueKey('entry-node-count-stale'),
             style: textStyle.copyWith(color: scheme.outline))
         : Text(statusText, style: textStyle));
+  }
+  // §734 — файловая подписка без текста на устройстве: просим выбрать файл.
+  if (entry.fileNeedsRepick) {
+    parts.add(Text(getLocalText.s("Choose the file again"),
+        key: const ValueKey('entry-file-repick'),
+        style: textStyle.copyWith(color: scheme.error)));
   }
 
   if (entry.list is SubscriptionServers) {

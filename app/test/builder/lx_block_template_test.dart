@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lxbox/models/parser_config.dart';
 import 'package:lxbox/services/builder/if_engine.dart';
+import 'package:lxbox/services/builder/sniff_guard.dart';
 
 void main() {
   final raw = jsonDecode(File('assets/wizard_template.json').readAsStringSync())
@@ -22,36 +23,130 @@ void main() {
     return walk(fragment, makeResolver(vars, byName));
   }
 
-  test('дефолты шаблона: сон 30s/5m, lazy, build_max 5, decoy; clamp и masque off не пишутся', () {
+  test('дефолты шаблона: сон 30s/5m, lazy, build_max 5, sniff_guard; clamp и masque off не пишутся', () {
     expect(lx({}), {
+      'sniff_guard': {
+        'nodes': {'sni_mismatch': true},
+        'tls': {'method': 'record_fragment'},
+        'quic': {
+          'method': 'decoy_first_byte',
+          'detour_type': {'socks': 'never'},
+        },
+      },
       'wg': {
         'idle_suspend': '30s',
         'idle_suspend_reachable': '5m',
         'lazy_build': true,
         'build_max': 5,
       },
-      'quic_sniff_decoy': 'detour',
     });
   });
 
-  test('quic_sniff_decoy: режим строкой; off и старое bool из rc.3 ключа не дают', () {
-    expect((lx({'quic_sniff_decoy': 'all'}) as Map)['quic_sniff_decoy'], 'all');
-    expect((lx({'quic_sniff_decoy': 'direct'}) as Map)['quic_sniff_decoy'], 'direct');
-    for (final v in ['off', 'true', 'false']) {
-      expect((lx({'quic_sniff_decoy': v}) as Map).containsKey('quic_sniff_decoy'), isFalse, reason: v);
+  const guardDefault = {
+    'nodes': {'sni_mismatch': true},
+    'tls': {'method': 'record_fragment'},
+    'quic': {
+      'method': 'decoy_first_byte',
+      'detour_type': {'socks': 'never'},
+    },
+  };
+
+  test('729 — sniff_guard: методы, фильтр и persist из переменных; off снимает секцию, оба off — блок', () {
+    final r = lx({'sniff_guard_tls': 'delay', 'sniff_guard_quic': 'off'}) as Map;
+    expect(r['sniff_guard'], {
+      'nodes': {'sni_mismatch': true},
+      'tls': {'method': 'delay'},
+    });
+    expect(
+        (lx({
+          'sniff_guard_tls': 'off',
+          'sniff_guard_quic': 'delay',
+          'sniff_guard_sni_mismatch': 'false',
+          'sniff_guard_persist': 'true',
+        }) as Map)['sniff_guard'],
+        {
+          // Явный false: без ключа ядро (с lx.34) фильтр включает.
+          'nodes': {'sni_mismatch': false},
+          'quic': {
+            'method': 'delay',
+            'detour_type': {'socks': 'never'},
+            'persist': true,
+          },
+        });
+    expect((lx({'sniff_guard_persist': 'true'}) as Map)['sniff_guard'], {
+      'nodes': {'sni_mismatch': true},
+      'tls': {'method': 'record_fragment', 'persist': true},
+      'quic': {
+        'method': 'decoy_first_byte',
+        'detour_type': {'socks': 'never'},
+        'persist': true,
+      },
+    });
+    expect(
+        (lx({'sniff_guard_tls': 'off', 'sniff_guard_quic': 'off'}) as Map)
+            .containsKey('sniff_guard'),
+        isFalse);
+    // Сохранённые значения снятых переменных ядру не уходят.
+    final old = lx({
+      'quic_sniff_decoy': 'all',
+      'quic_sniff_decoy_send': 'always',
+      'quic_sniff_decoy_outbounds': 'masque',
+      'quic_sniff_decoy_detours': 'vless',
+    }) as Map;
+    expect(old.containsKey('quic_sniff_decoy'), isFalse);
+    expect(old['sniff_guard'], guardDefault);
+    expect(raw.toString().contains('quic_sniff_decoy'), isFalse);
+  });
+
+  test('729 — гейт: ниже lx.34 блок снимается, без версии остаётся', () {
+    Map<String, dynamic> gated(Map<String, String> vars, String core) {
+      final config = <String, dynamic>{'lx': (lx(vars) as Map).cast<String, dynamic>()};
+      applySniffGuardGate(config, coreVersion: core);
+      return (config['lx'] as Map).cast<String, dynamic>();
+    }
+
+    expect(gated({}, '1.14.4-lx.34')['sniff_guard'], guardDefault);
+    expect(gated({}, '1.14.4-lx.35')['sniff_guard'], guardDefault);
+    expect(gated({}, '')['sniff_guard'], guardDefault);
+    expect(gated({}, '1.14.4-lx.33').containsKey('sniff_guard'), isFalse);
+    expect(gated({}, '1.14.4-lx.34-rc.1').containsKey('sniff_guard'), isFalse);
+  });
+
+  test('729 — probe: тот же блок без persist, по умолчаниям шаблона', () {
+    Map<String, dynamic> strip(Map m) => {
+          for (final e in m.entries)
+            '${e.key}': {...(e.value as Map)}..remove('persist'),
+        };
+    // Умолчания probe при пустых vars = умолчания шаблона.
+    expect(defaults['sniff_guard_sni_mismatch'], 'true');
+    expect(defaults['sniff_guard_persist'], 'false');
+    for (final vars in <Map<String, String>>[
+      {},
+      {'sniff_guard_persist': 'true'},
+      {'sniff_guard_sni_mismatch': 'false'},
+      {'sniff_guard_tls': 'fragment', 'sniff_guard_quic': 'delay'},
+      {'sniff_guard_tls': 'off'},
+      {'sniff_guard_quic': 'off'},
+    ]) {
+      expect(probeSniffGuard(vars, coreVersion: '1.14.4-lx.34'),
+          strip((lx(vars) as Map)['sniff_guard'] as Map),
+          reason: '$vars');
+    }
+    expect(
+        probeSniffGuard({'sniff_guard_tls': 'off', 'sniff_guard_quic': 'off'},
+            coreVersion: '1.14.4-lx.34'),
+        isNull);
+    expect(probeSniffGuard({}, coreVersion: '1.14.4-lx.33'), isNull);
+  });
+
+  test('720 отменена — awg_masquerade ядру не уходит ни при каком значении', () {
+    for (final v in ['all', 'direct']) {
+      expect((lx({'awg_masquerade': v}) as Map).containsKey('awg_masquerade'), isFalse, reason: v);
     }
   });
 
-  test('720 — awg_masquerade: all (дефолт ядра с lx.32) ключа не даёт, direct пишется строкой', () {
-    expect((lx({}) as Map).containsKey('awg_masquerade'), isFalse);
-    expect((lx({'awg_masquerade': 'all'}) as Map).containsKey('awg_masquerade'), isFalse);
-    expect((lx({'awg_masquerade': 'direct'}) as Map)['awg_masquerade'], 'direct');
-    // чужое значение ядру не уходит: блок lx строгий, неизвестный режим валит старт
-    expect((lx({'awg_masquerade': 'detour'}) as Map).containsKey('awg_masquerade'), isFalse);
-  });
-
   test('сон off — блока wg нет, reachable и lazy не пишутся', () {
-    final r = lx({'wg_idle_suspend': 'off', 'quic_sniff_decoy': 'off'});
+    final r = lx({'wg_idle_suspend': 'off', 'sniff_guard_tls': 'off', 'sniff_guard_quic': 'off'});
     expect(r, isEmpty);
   });
 
@@ -83,5 +178,11 @@ void main() {
     expect(on('wg_lazy_build', {'wg_idle_suspend': 'off'}), isFalse);
     expect(on('wg_build_max', {'wg_lazy_build': 'false'}), isFalse);
     expect(on('wg_build_max', {}), isTrue);
+    for (final name in ['sniff_guard_sni_mismatch', 'sniff_guard_persist']) {
+      expect(on(name, {}), isTrue, reason: name);
+      expect(on(name, {'sniff_guard_tls': 'off'}), isTrue, reason: name);
+      expect(on(name, {'sniff_guard_tls': 'off', 'sniff_guard_quic': 'off'}),
+          isFalse, reason: name);
+    }
   });
 }

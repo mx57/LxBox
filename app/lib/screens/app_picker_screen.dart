@@ -7,6 +7,7 @@ import '../models/app_info.dart';
 import '../services/app_info_cache.dart';
 import '../services/l10n/locale_controller.dart';
 import '../widgets/app_uid_subtitle.dart';
+import '../widgets/dpad_field_exit.dart';
 
 /// Screen for selecting apps. Returns updated list of package names on pop.
 class AppPickerResult {
@@ -64,15 +65,11 @@ class _AppPickerScreenState extends State<AppPickerScreen> {
     final pkg = app.packageName;
     AppInfoCache.ensure(pkg);
     final info = AppInfoCache.of(pkg) ?? app;
-    if (info.icon != null) {
-      return Image.memory(info.icon!,
-          width: 36, height: 36, gaplessPlayback: true);
-    }
     // Placeholder: первая буква имени в circle avatar.
     final letter = app.appName.isNotEmpty
         ? app.appName.characters.first.toUpperCase()
         : '?';
-    return SizedBox(
+    final placeholder = SizedBox(
       width: 36,
       height: 36,
       child: CircleAvatar(
@@ -84,6 +81,17 @@ class _AppPickerScreenState extends State<AppPickerScreen> {
             )),
       ),
     );
+    if (info.icon != null) {
+      // 693 итер. 2: декодировать в размер плитки, битая картинка → заглушка.
+      return Image.memory(info.icon!,
+          width: 36,
+          height: 36,
+          cacheWidth: 108,
+          cacheHeight: 108,
+          gaplessPlayback: true,
+          errorBuilder: (_, _, _) => placeholder);
+    }
+    return placeholder;
   }
 
   List<AppInfo> get _filtered {
@@ -218,17 +226,19 @@ class _AppPickerScreenState extends State<AppPickerScreen> {
             if (_loading) const LinearProgressIndicator(),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: TextField(
-                decoration: InputDecoration(
-                  hintText: getLocalText.s("Search apps..."),
-                  prefixIcon: const Icon(Icons.search, size: 20),
-                  isDense: true,
-                  border: const OutlineInputBorder(),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: DpadFieldExit(
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: getLocalText.s("Search apps..."),
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    isDense: true,
+                    border: const OutlineInputBorder(),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  style: const TextStyle(fontSize: 14),
+                  onChanged: (v) => setState(() => _search = v),
                 ),
-                style: const TextStyle(fontSize: 14),
-                onChanged: (v) => setState(() => _search = v),
               ),
             ),
             Padding(

@@ -425,8 +425,8 @@
   "Split handshake into multiple TLS records (try this first)": {
     "value": "Разбивать рукопожатие на несколько TLS-записей (попробуйте сначала это)"
   },
-  "Splits the TLS handshake so it carries no single-packet signature. Default for all servers; override per server, folder or subscription.": {
-    "value": "Разбивает handshake TLS, чтобы он не укладывался в один пакет с узнаваемой сигнатурой. Умолчание для всех серверов; переопределяется на сервере, в папке или подписке."
+  "Splits the TLS handshake so it carries no single-packet signature. Default for all servers; override per server, folder or subscription. Not applied to servers with a detour: there the core's sniff guard decides.": {
+    "value": "Разбивает handshake TLS, чтобы он не укладывался в один пакет с узнаваемой сигнатурой. Умолчание для всех серверов; переопределяется на сервере, в папке или подписке. К серверам с detour не применяется: там решает защита от сниффинга ядра."
   },
   "Stack": {
     "value": "Стек"
@@ -824,23 +824,8 @@
   "QUIC": {
     "value": "QUIC"
   },
-  "AWG masquerade": {
-    "value": "Маскировка AWG"
-  },
-  "When an AmneziaWG node sends its masquerade packets (ip=quic, i1…) before the handshake. All paths: always, also through another node. Direct only: when the node dials from this device's own socket; through another node a single handshake packet goes out.": {
-    "value": "Когда узел AmneziaWG отправляет маскировочные пакеты (ip=quic, i1…) перед рукопожатием. All paths — всегда, в том числе через другой узел. Direct only — когда узел звонит с собственного сокета устройства; через другой узел уходит один пакет рукопожатия."
-  },
-  "Direct only": {
-    "value": "Только напрямую"
-  },
-  "All paths (default)": {
-    "value": "Все пути (по умолчанию)"
-  },
   "MASQUE (HTTP/3), Hysteria2, TUIC and AWG with QUIC masquerade (ip=quic).": {
     "value": "MASQUE (HTTP/3), Hysteria2, TUIC и AWG с маскировкой под QUIC (ip=quic)."
-  },
-  "Anti-sniff decoy": {
-    "value": "Обманка от сниффинга"
   },
   "MASQUE idle timeout": {
     "value": "Таймаут простоя MASQUE"
@@ -848,13 +833,46 @@
   "Close a MASQUE tunnel that carried no traffic for this long; it reconnects on next use. A node's own idle timeout wins.": {
     "value": "Закрывать туннель MASQUE, по которому столько времени не было трафика; он переподключится при следующем использовании. Собственный таймаут простоя узла сильнее."
   },
-  "Send one junk byte before the QUIC handshake so a relay that sniffs UDP cannot redirect the connection by its SNI. Through detour: only connections carried by another node; Direct: only this device's own socket; All: both. Also covers AWG nodes whose masquerade imitates QUIC (ip=quic).": {
-    "value": "Отправлять один мусорный байт перед QUIC-рукопожатием, чтобы релей, который сниффит UDP, не перенаправил соединение по SNI. Through detour — только соединения, которые несёт другой узел; Direct — только собственный сокет устройства; All — оба случая. Действует и на узлы AWG с маскировкой под QUIC (ip=quic)."
+  "Sniff guard": {
+    "value": "Защита от сниффинга"
   },
-  "Through detour (default)": {
-    "value": "Через detour (по умолчанию)"
+  "Keeps a relay or router that reads the server name from the first handshake packet from redirecting the connection by that name. The core learns from connection outcomes which paths need it.": {
+    "value": "Не даёт релею или роутеру, который читает имя сервера из первого пакета рукопожатия, перенаправить соединение по этому имени. Ядро само учится по исходам подключений, каким путям защита нужна."
   },
-  "All": {
-    "value": "Все"
+  "TLS method": {
+    "value": "Метод для TLS"
+  },
+  "How the TLS ClientHello is hidden from a sniffing relay. Record fragment: split into several TLS records, no delay. Fragment: split into TCP segments with a pause. Delay: two pieces with a 300 ms pause. Off: no protection; nodes behind a relay that redirects by SNI stop connecting.": {
+    "value": "Как TLS ClientHello прячется от сниффящего релея. Record fragment — разрез на несколько TLS-записей, без задержки. Fragment — разрез на TCP-сегменты с паузой. Delay — два куска с паузой 300 мс. Off — защиты нет; узлы за релеем, который перенаправляет по SNI, перестают подключаться."
+  },
+  "QUIC method": {
+    "value": "Метод для QUIC"
+  },
+  "How the QUIC handshake (MASQUE, Hysteria2, TUIC, XHTTP over HTTP/3, AWG with QUIC masquerade) is hidden from a sniffing relay. Decoy byte: one junk byte before the first packet, servers drop it. Delay: the second handshake packet is held for 300 ms. Off: no protection. The decoy byte is never sent through a SOCKS relay.": {
+    "value": "Как QUIC-рукопожатие (MASQUE, Hysteria2, TUIC, XHTTP по HTTP/3, AWG с маскировкой под QUIC) прячется от сниффящего релея. Decoy byte — один мусорный байт перед первым пакетом, серверы его отбрасывают. Delay — второй пакет рукопожатия придерживается на 300 мс. Off — защиты нет. Через SOCKS-релей байт не отправляется никогда."
+  },
+  "Record fragment (default)": {
+    "value": "Record fragment (по умолчанию)"
+  },
+  "Fragment": {
+    "value": "Fragment"
+  },
+  "Delay": {
+    "value": "Delay"
+  },
+  "Decoy byte (default)": {
+    "value": "Байт-обманка (по умолчанию)"
+  },
+  "Only nodes with a masked SNI": {
+    "value": "Только узлы с маскировочным SNI"
+  },
+  "Protect only nodes whose SNI differs from the server address (REALITY, WARP, a fake SNI): only they break when a relay redirects by SNI. Off: every node that supports the protection gets it.": {
+    "value": "Защищать только узлы, у которых SNI не совпадает с адресом сервера (REALITY, WARP, подставной SNI): только они ломаются, когда релей перенаправляет по SNI. Выключено — защиту получает каждый узел, который её умеет."
+  },
+  "Remember relays across restarts": {
+    "value": "Помнить релеи между перезапусками"
+  },
+  "Keep what the core has learned about each encrypted relay across restarts and config changes. Off: every start begins from the defaults and learns again.": {
+    "value": "Сохранять то, что ядро узнало о каждом зашифрованном релее, между перезапусками и сменами конфига. Выключено — каждый старт начинает с умолчаний и учится заново."
   }
 }

@@ -19,6 +19,7 @@ import com.leadaxe.lxbox.vpn.BootReceiver
 import com.leadaxe.lxbox.vpn.BoxApplication
 import com.leadaxe.lxbox.vpn.BoxVpnService
 import com.leadaxe.lxbox.vpn.L10n
+import com.leadaxe.lxbox.vpn.PathMtuProbe
 import com.leadaxe.lxbox.vpn.PermissionUtils
 import com.leadaxe.lxbox.vpn.QuickShortcuts
 import com.leadaxe.lxbox.vpn.ServiceNotification
@@ -104,6 +105,11 @@ class MainActivity : FlutterActivity() {
         )
         WifiHistoryBridge.attach(wifiHistoryChannel)
 
+        // §725 — проба Path MTU мимо туннеля (ICMP-сокет на физической сети).
+        PathMtuProbe.attach(
+            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, PathMtuProbe.CHANNEL),
+        )
+
         // §624 — нативный редактор JSON-полей (sora-editor) как platform view.
         flutterEngine.platformViewsController.registry.registerViewFactory(
             com.leadaxe.lxbox.editor.SORA_EDITOR_VIEW_TYPE,
@@ -170,6 +176,10 @@ class MainActivity : FlutterActivity() {
                     "isTelevision" -> {
                         // §622 — режим телевизора: пункт приёма настроек только здесь.
                         result.success(isTelevision)
+                    }
+                    "systemAccentColor" -> {
+                        // §735 — Material You: акцент палитры обоев (ARGB).
+                        result.success(systemAccentColor())
                     }
                     "setKeepScreenOn" -> {
                         // §622 — экран приёма держит экран включённым.
@@ -518,6 +528,16 @@ class MainActivity : FlutterActivity() {
         ui?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION ||
             packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
     }
+
+    /// §735 — тон 50 первичной тональной палитры, которую Android 12+ строит
+    /// из обоев (Material You). Ниже API 31 палитры нет; на TV ресурсы есть,
+    /// но статичные, не из обоев, — тоже null (опция в UI скрыта).
+    private fun systemAccentColor(): Int? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !isTelevision) {
+            getColor(android.R.color.system_accent1_500)
+        } else {
+            null
+        }
 
     /// Пакеты-заглушки, которыми TV-framework затыкает отсутствующие
     /// системные приложения. Матчим по префиксу — имя различается между
