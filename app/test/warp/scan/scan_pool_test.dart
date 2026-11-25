@@ -28,6 +28,46 @@ void main() {
     return true;
   }
 
+  group('§741 isWarpWgHost', () {
+    final pool = ScanPool.fromFullJson({
+      'wireguard': {
+        'v4_cidr': [
+          '162.159.192.0/24',
+          '188.114.96.0/22',
+          'broken',
+          '10.0.0.0/nope',
+        ],
+        'v6_cidr': ['2606:4700:d0::/64'],
+        'ports': [2408],
+        'endpoints_preset': ['engage.cloudflareclient.com:2408'],
+        'recommended_endpoint': 'WARP.RECOMMENDED.EXAMPLE:2408',
+      },
+    })!;
+
+    test('принимает preset/recommended-домены без учёта регистра и порта', () {
+      expect(pool.isWarpWgHost('engage.cloudflareclient.com'), isTrue);
+      expect(pool.isWarpWgHost('ENGAGE.CLOUDFLARECLIENT.COM:500'), isTrue);
+      expect(pool.isWarpWgHost('warp.recommended.example'), isTrue);
+      expect(pool.isWarpWgHost('unknown.example'), isFalse);
+    });
+
+    test('проверяет IPv4 и IPv6 по CIDR, а не по строковому префиксу', () {
+      expect(pool.isWarpWgHost('162.159.192.7'), isTrue);
+      expect(pool.isWarpWgHost('162.159.193.7'), isFalse);
+      expect(pool.isWarpWgHost('188.114.97.3'), isTrue);
+      expect(pool.isWarpWgHost('188.114.100.3'), isFalse);
+      expect(pool.isWarpWgHost('[2606:4700:d0::7]:2408'), isTrue);
+      expect(pool.isWarpWgHost('2606:4700:d1::7'), isFalse);
+      expect(pool.isWarpWgHost('10.0.0.1'), isFalse);
+      expect(pool.isWarpWgHost(''), isFalse);
+    });
+
+    test('битые CIDR пропускаются без исключения', () {
+      expect(() => pool.isWarpWgHost('203.0.113.5'), returnsNormally);
+      expect(pool.isWarpWgHost('203.0.113.5'), isFalse);
+    });
+  });
+
   group('randomIpInCidr', () {
     final rng = Random(42);
     for (final cidr in [

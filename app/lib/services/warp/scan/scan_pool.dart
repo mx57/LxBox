@@ -17,6 +17,8 @@ import 'dart:io' show InternetAddress;
 import 'dart:math';
 import 'dart:typed_data';
 
+import '../../parser/tt_deeplink.dart' show splitHostPort;
+
 class ScanPool {
   const ScanPool({
     required this.wgV4Cidr,
@@ -163,6 +165,56 @@ class ScanPool {
       return null;
     }
     return null;
+  }
+
+  /// §741 — входит ли host в доверенный WARP WireGuard-пул. Для доменов
+  /// источник истины — явные endpoints/recommended, для IP — CIDR.
+  bool isWarpWgHost(String host) {
+    final value = splitHostPort(host).$1.trim();
+    if (value.isEmpty) return false;
+    final normalized = value.toLowerCase();
+    for (final endpoint in [...wgEndpointsPreset, wgRecommendedEndpoint]) {
+      if (splitHostPort(endpoint).$1.trim().toLowerCase() == normalized) {
+        return true;
+      }
+    }
+    final InternetAddress? address;
+    try {
+      address = InternetAddress(normalized);
+    } on ArgumentError {
+      return false;
+    } on FormatException {
+      return false;
+    }
+    for (final cidr in [...wgV4Cidr, ...wgV6Cidr]) {
+      if (_addressInCidr(address, cidr)) return true;
+    }
+    return false;
+  }
+
+  bool _addressInCidr(InternetAddress address, String cidr) {
+    try {
+      final slash = cidr.indexOf('/');
+      if (slash <= 0) return false;
+      final network = InternetAddress(cidr.substring(0, slash).trim());
+      final raw = address.rawAddress;
+      if (network.rawAddress.length != raw.length) return false;
+      final mask = int.parse(cidr.substring(slash + 1).trim());
+      if (mask < 0 || mask > raw.length * 8) return false;
+      final net = network.rawAddress;
+      var bits = mask;
+      for (var i = 0; i < raw.length && bits > 0; i++) {
+        final take = bits >= 8 ? 8 : bits;
+        final byteMask = (0xff << (8 - take)) & 0xff;
+        if ((raw[i] & byteMask) != (net[i] & byteMask)) return false;
+        bits -= take;
+      }
+      return true;
+    } on ArgumentError {
+      return false;
+    } on FormatException {
+      return false;
+    }
   }
 
   /// Пул пригоден, если валиден хотя бы один транспорт. WG требует портов

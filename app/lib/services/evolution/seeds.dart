@@ -14,6 +14,7 @@
 import '../../models/node_spec.dart' show NodeSpec;
 import '../../models/template_vars.dart' show TemplateVars;
 import '../warp/awg_profile.dart';
+import '../warp/scan/scan_pool.dart';
 import 'genome.dart';
 
 /// Причина, по которой узел не стал геномом. Коды, а не строки: перевод — дело
@@ -30,6 +31,9 @@ enum SeedSkipReason {
 
   /// `emit` бросил — узел не разбирается.
   broken,
+
+  /// WG/AWG вне WARP-пула: оценщик пересобрал бы его с кредами WARP.
+  privateServer,
 }
 
 /// Результат посева.
@@ -54,8 +58,10 @@ class SeedSet {
 
 /// Собирает посев из списка узлов (экран передаёт `entry.list.nodes` по всем
 /// источникам). Дубликаты снимаются по [Genome.key] — два одинаковых узла дали
-/// бы два одинаковых генома и удвоили бы цену пробы.
-SeedSet seedsFromNodes(Iterable<NodeSpec> nodes) {
+/// бы два одинаковых генома и удвоили бы цену пробы. Если [pool] загружен,
+/// приватные WG/AWG-узлы не становятся WARP-семенами; при `pool == null` фильтр
+/// fail-open, потому что экран уже сообщает о недоступном asset.
+SeedSet seedsFromNodes(Iterable<NodeSpec> nodes, {ScanPool? pool}) {
   final genomes = <Genome>[];
   final seen = <String>{};
   final skipped = <SeedSkipReason, int>{};
@@ -72,6 +78,13 @@ SeedSet seedsFromNodes(Iterable<NodeSpec> nodes) {
           ? SeedSkipReason.noAddress
           : SeedSkipReason.notWarp;
       skipped[why] = (skipped[why] ?? 0) + 1;
+      continue;
+    }
+    if (g.transport == EvoTransport.awg &&
+        pool != null &&
+        !pool.isWarpWgHost(g.endpoint)) {
+      skipped[SeedSkipReason.privateServer] =
+          (skipped[SeedSkipReason.privateServer] ?? 0) + 1;
       continue;
     }
     if (seen.add(g.key)) genomes.add(g);

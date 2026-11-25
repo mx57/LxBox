@@ -1175,6 +1175,9 @@
   "Not available: the node sets I2 explicitly.": {
     "value": "不可用：节点显式设置了 I2。"
   },
+  "Not WARP": {
+    "value": "非 WARP"
+  },
   "Nothing to import: the file has no rules, directions or settings.": {
     "value": "无可导入内容：文件中没有规则、方向或设置。"
   },
@@ -2445,6 +2448,9 @@
   },
   "Grouping": {
     "value": "分组方式"
+  },
+  "Groups": {
+    "value": "分组"
   },
   "HTTP": {
     "value": "HTTP"
@@ -3732,6 +3738,9 @@
   "Private IP": {
     "value": "私有 IP"
   },
+  "Private WG/AWG": {
+    "value": "私有 WG/AWG"
+  },
   "Private source IP": {
     "value": "私有源 IP"
   },
@@ -4885,6 +4894,9 @@
   },
   "Unlimited": {
     "value": "无限制"
+  },
+  "Unparsable": {
+    "value": "无法解析"
   },
   "Unreadable entry": {
     "value": "无法读取的条目"
@@ -7183,5 +7195,8 @@
   },
   "WARP CPS (experimental)": {
     "value": "WARP CPS（实验性）"
+  },
+  "WARP seed filtering is unavailable — private WireGuard/AmneziaWG configs may be included": {
+    "value": "WARP 种子筛选不可用——私有 WireGuard/AmneziaWG 配置可能会被纳入"
   }
 }

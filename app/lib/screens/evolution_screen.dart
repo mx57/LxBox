@@ -75,6 +75,7 @@ class _EvolutionScreenState extends State<EvolutionScreen>
   /// Штатный пул сканера (asset + секция региона): из него эволюция берёт
   /// адреса, порты и SNI-пул. Пустой = мутации некуда ехать, экран это скажет.
   ScanPool? _assetPool;
+  bool _seedFilterUnavailable = false;
   List<DnsServerRef> _dnsRefs = const [];
 
   ProbeGenomeEvaluator? _evaluator;
@@ -126,7 +127,6 @@ class _EvolutionScreenState extends State<EvolutionScreen>
   }
 
   Future<void> _loadContext() async {
-    _seeds = seedsFromNodes(widget.nodes);
     EvolutionSettings loaded;
     ScanPool? pool;
     List<DnsServerRef> dns = const [];
@@ -150,11 +150,14 @@ class _EvolutionScreenState extends State<EvolutionScreen>
     } catch (e) {
       _log.w('evo', 'dns settings unavailable: $e');
     }
+    final seeds = seedsFromNodes(widget.nodes, pool: pool);
     if (!mounted) return;
     setState(() {
       _settings = loaded;
       _assetPool = pool;
       _dnsRefs = dns;
+      _seeds = seeds;
+      _seedFilterUnavailable = pool == null;
     });
     // Семена могли прийти после нажатия Start (рейс: экран открылся, пока
     // `_loadContext` ещё вернёт) — тогда ошибка «нет семян» оставлена
@@ -822,7 +825,7 @@ class _EvolutionScreenState extends State<EvolutionScreen>
     final s = _seeds;
     final skipped = [
       for (final e in s.skipped.entries)
-        '${getLocalText.s(_skipLabel(e.key))} ${e.value}',
+        '${_skipLabel(e.key)} ${e.value}',
     ].join(' · ');
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -847,6 +850,14 @@ class _EvolutionScreenState extends State<EvolutionScreen>
             Text(
               skipped,
               style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+            ),
+          ],
+          if (_seedFilterUnavailable) ...[
+            const SizedBox(height: 4),
+            Text(
+              getLocalText.s(
+                  "WARP seed filtering is unavailable — private WireGuard/AmneziaWG configs may be included"),
+              style: TextStyle(fontSize: 11, color: cs.tertiary),
             ),
           ],
           if (s.genomes.isEmpty && s.total > 0) ...[
@@ -898,10 +909,11 @@ class _EvolutionScreenState extends State<EvolutionScreen>
   }
 
   String _skipLabel(SeedSkipReason r) => switch (r) {
-        SeedSkipReason.notWarp => "Not WARP",
-        SeedSkipReason.group => "Groups",
-        SeedSkipReason.noAddress => "No address",
-        SeedSkipReason.broken => "Unparsable",
+        SeedSkipReason.notWarp => getLocalText.s("Not WARP"),
+        SeedSkipReason.group => getLocalText.s("Groups"),
+        SeedSkipReason.noAddress => getLocalText.s("No address"),
+        SeedSkipReason.broken => getLocalText.s("Unparsable"),
+        SeedSkipReason.privateServer => getLocalText.s("Private WG/AWG"),
       };
 
   Widget _honestyNote(ColorScheme cs) => Column(

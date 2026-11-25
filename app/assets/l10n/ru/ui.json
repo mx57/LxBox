@@ -1361,6 +1361,9 @@
   "Not available: the node sets I2 explicitly.": {
     "value": "Недоступно: узел задаёт I2 явно."
   },
+  "Not WARP": {
+    "value": "Не WARP"
+  },
   "Nothing to import: the file has no rules, directions or settings.": {
     "value": "Импортировать нечего: в файле нет правил, Направлений и настроек."
   },
@@ -2677,6 +2680,9 @@
   "Grouping": {
     "value": "Группировка"
   },
+  "Groups": {
+    "value": "Группы"
+  },
   "HTTP": {
     "value": "HTTP"
   },
@@ -3984,6 +3990,9 @@
   "Private IP": {
     "value": "Приватный IP"
   },
+  "Private WG/AWG": {
+    "value": "Приватные WG/AWG"
+  },
   "Private source IP": {
     "value": "Приватный IP источника"
   },
@@ -5152,6 +5161,9 @@
   },
   "Unlimited": {
     "value": "никогда"
+  },
+  "Unparsable": {
+    "value": "Не разбирается"
   },
   "Unreadable entry": {
     "value": "Нечитаемая запись"
@@ -7474,5 +7486,8 @@
   },
   "WARP CPS (experimental)": {
     "value": "WARP CPS (экспериментальный)"
+  },
+  "WARP seed filtering is unavailable — private WireGuard/AmneziaWG configs may be included": {
+    "value": "Фильтр семян WARP недоступен — в посев могут попасть приватные конфиги WireGuard/AmneziaWG"
   }
 }

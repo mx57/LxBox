@@ -7,6 +7,7 @@ import 'package:lxbox/services/warp/awg_profile.dart';
 import 'package:lxbox/services/warp/masque_account.dart';
 import 'package:lxbox/services/warp/scan/scan_models.dart';
 import 'package:lxbox/services/warp/scan/scan_node_builder.dart';
+import 'package:lxbox/services/warp/scan/scan_pool.dart';
 import 'package:lxbox/services/warp/warp_account.dart';
 
 import '../../parser/engine_test_setup.dart';
@@ -168,6 +169,55 @@ void main() {
   });
 
   group('seedsFromNodes', () {
+    ScanPool warpPool() => ScanPool.fromFullJson({
+          'wireguard': {
+            'v4_cidr': ['162.159.192.0/24'],
+            'ports': [2408],
+            'endpoints_preset': ['engage.cloudflareclient.com:2408'],
+          },
+        })!;
+
+    test('приватный WG/AWG не становится WARP-семенем', () {
+      final set = seedsFromNodes(
+        [awgNode(ip: '203.0.113.5'), awgNode()],
+        pool: warpPool(),
+      );
+      expect(set.total, 2);
+      expect(set.genomes, hasLength(1));
+      expect(set.genomes.single.endpoint, '162.159.192.7');
+      expect(set.skipped[SeedSkipReason.privateServer], 1);
+    });
+
+    test('WARP preset и MASQUE проходят фильтр', () {
+      final set = seedsFromNodes(
+        [
+          awgNode(ip: 'engage.cloudflareclient.com'),
+          masqueNode(ip: '203.0.113.9'),
+        ],
+        pool: warpPool(),
+      );
+      expect(set.genomes, hasLength(2));
+      expect(set.skipped, isEmpty);
+    });
+
+    test('недоступный пул оставляет прежнее fail-open поведение', () {
+      final set = seedsFromNodes([awgNode(ip: '203.0.113.5')]);
+      expect(set.genomes, hasLength(1));
+      expect(set.skipped, isEmpty);
+    });
+
+    test('загруженный MASQUE-only пул не считает WG адреса WARP', () {
+      final pool = ScanPool.fromFullJson({
+        'masque': {
+          'v4_cidr': ['162.159.198.0/24'],
+          'ports_h3': [443],
+        },
+      })!;
+      final set = seedsFromNodes([awgNode()], pool: pool);
+      expect(set.genomes, isEmpty);
+      expect(set.skipped[SeedSkipReason.privateServer], 1);
+    });
+
     test('считает看过е узлы и не дублирует одинаковые геномы', () {
       final set = seedsFromNodes([awgNode(), awgNode(), masqueNode()]);
       expect(set.total, 3);
