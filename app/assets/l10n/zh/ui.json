@@ -3840,6 +3840,9 @@
   "Ready-made rules you can copy into Rules, then edit freely.": {
     "value": "现成规则，可复制到「规则」后自由修改。"
   },
+  "Rechecking selected configs…": {
+    "value": "正在重复检查所选配置…"
+  },
   "Rebuild and reload core": {
     "value": "重建并重载内核"
   },
@@ -6959,6 +6962,9 @@
   "Config body": {
     "value": "配置内容"
   },
+  "Config did not pass the fresh check": {
+    "value": "配置未通过重复检查"
+  },
   "Config evolution": {
     "value": "配置演化"
   },
@@ -7079,8 +7085,8 @@
   "Nothing to choose from yet": {
     "value": "暂无可选配置"
   },
-  "Nothing to save — these configs could not be rebuilt": {
-    "value": "无可保存内容——这些配置无法重建"
+  "No selected config passed the fresh check": {
+    "value": "所选配置均未通过重复检查"
   },
   "One and the same reason for every candidate is a probe-path problem, not a block — check the DNS server and the target country, then rerun": {
     "value": "所有候选配置失败原因相同，这是探测路径问题而非封锁——请检查 DNS 服务器和目标国家/地区，然后重试"

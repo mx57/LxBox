@@ -4092,6 +4092,9 @@
   "Ready-made rules you can copy into Rules, then edit freely.": {
     "value": "Готовые правила: скопируйте в «Правила» и свободно редактируйте."
   },
+  "Rechecking selected configs…": {
+    "value": "Повторная проверка выбранных конфигов…"
+  },
   "Rebuild and reload core": {
     "value": "Пересобрать и перезагрузить ядро"
   },
@@ -7250,6 +7253,9 @@
   "Config body": {
     "value": "Тело конфига"
   },
+  "Config did not pass the fresh check": {
+    "value": "Конфиг не прошёл повторную проверку"
+  },
   "Config evolution": {
     "value": "Эволюция конфигов"
   },
@@ -7370,8 +7376,8 @@
   "Nothing to choose from yet": {
     "value": "Пока нечего выбирать"
   },
-  "Nothing to save — these configs could not be rebuilt": {
-    "value": "Нечего сохранять — эти конфиги не удалось пересобрать"
+  "No selected config passed the fresh check": {
+    "value": "Ни один выбранный конфиг не прошёл повторную проверку"
   },
   "One and the same reason for every candidate is a probe-path problem, not a block — check the DNS server and the target country, then rerun": {
     "value": "Одна и та же причина у всех кандидатов — проблема пути пробы, а не блокировка: проверьте DNS-сервер и целевую страну, затем повторите"

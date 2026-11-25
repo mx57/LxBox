@@ -32,6 +32,7 @@ import '../controllers/subscription_controller.dart';
 import '../models/dns_ref.dart';
 import '../models/node_spec.dart';
 import '../services/evolution/engine.dart';
+import '../services/evolution/export_check.dart';
 import '../services/evolution/genome.dart';
 import '../services/evolution/objectives.dart';
 import '../services/evolution/pools.dart';
@@ -83,6 +84,7 @@ class _EvolutionScreenState extends State<EvolutionScreen>
   bool _running = false;
   bool _paused = false;
   bool _preparing = false;
+  bool _exporting = false;
   int _generation = 0;
   int _requestsUsed = 0;
   List<GenerationSummary> _stats = const [];
@@ -202,7 +204,7 @@ class _EvolutionScreenState extends State<EvolutionScreen>
   // ───────────────────────── прогон ─────────────────────────
 
   Future<void> _start() async {
-    if (_running || _preparing) return;
+    if (_running || _preparing || _exporting) return;
     if (_seeds.genomes.isEmpty) {
       setState(() => _error = getLocalText.s(
           "There are no usable configs to evolve — generate or import WARP or WireGuard/AmneziaWG nodes first"));
@@ -344,34 +346,58 @@ class _EvolutionScreenState extends State<EvolutionScreen>
 
   Future<void> _saveSelected() async {
     final evaluator = _evaluator;
-    if (evaluator == null || _hall.isEmpty) return;
-    final bodies = <String>[];
-    final missing = <String>[];
-    for (final f in _hall) {
-      if (!_checked.contains(f.genome.key)) continue;
-      final body = evaluator.exportFor(f.genome);
-      if (body == null) {
-        missing.add(f.genome.shortLabel);
-      } else {
-        bodies.add(body);
-      }
-    }
-    if (bodies.isEmpty) {
-      showSnack(getLocalText.s("Nothing to save — these configs could not be rebuilt"));
+    if (evaluator == null || _hall.isEmpty || _exporting) return;
+    final selected = [
+      for (final f in _hall)
+        if (_checked.contains(f.genome.key)) f,
+    ];
+    if (selected.isEmpty) return;
+    setState(() {
+      _exporting = true;
+      _statusKey = 'verifying';
+    });
+    final result = await revalidateAndExport(
+      selected,
+      evaluator: evaluator,
+      export: evaluator.exportFor,
+      settings: _settings,
+    );
+    if (!mounted) return;
+    if (result.bodies.isEmpty) {
+      setState(() {
+        _exporting = false;
+        _statusKey = 'finished';
+      });
+      showSnack(result.error?.isNotEmpty == true
+          ? result.error!
+          : getLocalText.s("No selected config passed the fresh check"));
       return;
     }
-    await widget.subController.addEvolutionFolder(bodies);
+    try {
+      await widget.subController.addEvolutionFolder(result.bodies);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _exporting = false;
+        _statusKey = 'finished';
+      });
+      showSnack('$e');
+      return;
+    }
     if (!mounted) return;
-    setState(() {});
+    setState(() {
+      _exporting = false;
+      _statusKey = 'finished';
+    });
     showSnack(getLocalText.s(
       "Saved %1\$s configs to folder %2\$s",
-      '${bodies.length}',
+      '${result.bodies.length}',
       SubscriptionController.kEvolutionFolderName,
     ));
-    if (missing.isNotEmpty) {
+    if (result.failed.isNotEmpty) {
       showSnack(getLocalText.s(
         "%1\$s configs could not be rebuilt and were skipped",
-        '${missing.length}',
+        '${result.failed.length}',
       ));
     }
   }
@@ -495,13 +521,36 @@ class _EvolutionScreenState extends State<EvolutionScreen>
     });
   }
 
-  void _openCandidate(Fitness f) {
-    final exported = _running ? null : _evaluator?.exportFor(f.genome);
+  Future<void> _openCandidate(Fitness f) async {
+    final evaluator = _evaluator;
+    if (_running || evaluator == null || _exporting) return;
+    setState(() {
+      _exporting = true;
+      _statusKey = 'verifying';
+    });
+    final result = await revalidateAndExport(
+      [f],
+      evaluator: evaluator,
+      export: evaluator.exportFor,
+      settings: _settings,
+    );
+    if (!mounted) return;
+    setState(() {
+      _exporting = false;
+      _statusKey = 'finished';
+    });
+    final exported = result.bodies.firstOrNull;
+    if (exported == null) {
+      showSnack(result.error?.isNotEmpty == true
+          ? result.error!
+          : getLocalText.s("Config did not pass the fresh check"));
+      return;
+    }
     showAppBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (ctx) => _CandidateSheet(
-        fitness: f,
+        fitness: result.verified.first,
         settings: _settings,
         body: exported,
         records: _records,
@@ -529,7 +578,7 @@ class _EvolutionScreenState extends State<EvolutionScreen>
           ),
           IconButton(
             tooltip: getLocalText.s('Settings'),
-            onPressed: _running ? null : _openSettings,
+            onPressed: _running || _exporting ? null : _openSettings,
             icon: const Icon(Icons.tune),
           ),
         ],
@@ -596,7 +645,7 @@ class _EvolutionScreenState extends State<EvolutionScreen>
           SizedBox(
             width: 14,
             height: 14,
-            child: _running && !_paused
+            child: (_running || _exporting) && !_paused
                 ? CircularProgressIndicator(strokeWidth: 2, color: cs.primary)
                 : Icon(_statusKey == 'finished'
                     ? Icons.verified_outlined
@@ -605,7 +654,9 @@ class _EvolutionScreenState extends State<EvolutionScreen>
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              getLocalText.s(_statusLabel),
+              _statusKey == 'verifying'
+                  ? getLocalText.s("Rechecking selected configs…")
+                  : getLocalText.s(_statusLabel),
               style: TextStyle(
                 color: cs.onSurfaceVariant,
                 fontSize: 12,
@@ -1233,7 +1284,7 @@ class _EvolutionScreenState extends State<EvolutionScreen>
       primaryAction = _paused ? _resume : null;
     } else {
       primary = Text(getLocalText.s("Start evolution"));
-      primaryAction = _preparing ? null : _start;
+      primaryAction = _preparing || _exporting ? null : _start;
     }
     return SafeArea(
       minimum: const EdgeInsets.fromLTRB(12, 6, 12, 12),
@@ -1256,7 +1307,7 @@ class _EvolutionScreenState extends State<EvolutionScreen>
           if (!_running && _hall.isNotEmpty) ...[
             const SizedBox(width: 8),
             FilledButton.tonalIcon(
-              onPressed: _checked.isEmpty ? null : _saveSelected,
+              onPressed: _checked.isEmpty || _exporting ? null : _saveSelected,
               icon: const Icon(Icons.folder_open),
               label: Text(getLocalText.s(
                 "Save %s",
