@@ -2,6 +2,7 @@ name: AWG3 integration
 
 on:
   workflow_dispatch:
+  workflow_call:
   schedule:
     - cron: '17 3 * * *'
 
