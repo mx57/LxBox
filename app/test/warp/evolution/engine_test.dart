@@ -127,6 +127,46 @@ void main() {
     expect(out.stats.single.diversity, greaterThan(0));
   });
 
+  test('адаптивные ранги: редкие выжившие прекращают дорогие попытки', () async {
+    final settings = s(rungs: const [1, 2, 3]);
+    final fake = _FakeEvaluator(pass: (g) => g.key == seeds.first.key);
+    final engine = EvolutionEngine(
+      evaluator: fake,
+      pools: pool,
+      settings: settings,
+    );
+
+    final out = await engine.run(seeds);
+    expect(fake.attempts, [1]);
+    expect(out.requestsUsed, 6);
+    expect(out.stats.single.rungKeeps, 1);
+    expect(
+      engine.records
+          .firstWhere((r) => r.genome.key == seeds.first.key)
+          .lifetime
+          .attempts,
+      1,
+    );
+    expect(settings.rungAttempts, [1, 2, 3]);
+  });
+
+  test('адаптивные ранги: ровно 30% выживших сохраняет полный план', () async {
+    final population = _seedsDifferingByDns(10);
+    final survivors = population.take(3).map((g) => g.key).toSet();
+    final fake = _FakeEvaluator(pass: (g) => survivors.contains(g.key));
+    final engine = EvolutionEngine(
+      evaluator: fake,
+      pools: pool,
+      settings: s(population: 10, rungs: const [1, 2, 3]),
+    );
+
+    final out = await engine.run(population);
+    expect(fake.attempts, [1, 2, 3]);
+    expect(fake.batches.map((b) => b.length), [10, 2, 2]);
+    expect(out.requestsUsed, 20);
+    expect(out.stats.single.rungKeeps, 2);
+  });
+
   test('гистерезис: один прогон даёт подтверждение, но не архив', () async {
     final fake = _FakeEvaluator();
     final engine = EvolutionEngine(
