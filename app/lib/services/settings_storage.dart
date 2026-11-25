@@ -310,6 +310,8 @@ class SettingsStorage {
     'dynamic_color', // §735 — системные цвета (Material You)
     'app_language', // §279 — язык приложения (system|en|ru); НЕ config-var
     'region', // §425 — регион использования (auto|none|<cc>); НЕ config-var
+    // Эволюция (§848): безопасный архив без тел узлов и сетевых метаданных.
+    'evo_hall',
   };
 
   /// Полный allowlist для подключей `vars` при импорте: кодовые флаги ∪ все

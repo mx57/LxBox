@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lxbox/services/evolution/engine.dart';
 import 'package:lxbox/services/evolution/genome.dart';
+import 'package:lxbox/services/evolution/hall_of_fame.dart';
 import 'package:lxbox/services/evolution/objectives.dart';
 import 'package:lxbox/services/evolution/pools.dart';
 import 'package:lxbox/services/evolution/settings.dart';
@@ -556,6 +557,180 @@ void main() {
     expect(notes.any((n) => n.contains('причины отказов')), isTrue,
         reason: 'движок обязан сказать причины в журнале, а не только «0 %»');
   });
+
+  test('восстановленный архив переживает отказ подготовки', () async {
+    final champion = seeds.first;
+    final archive = EvolutionHall().mergeRecords([
+      _hallRecord(champion, confirmations: 2),
+    ]);
+    final fake = _FakeEvaluator(prepareReason: 'probe unavailable');
+    final engine = EvolutionEngine(
+      evaluator: fake,
+      pools: pool,
+      settings: s(confirmations: 2),
+      restored: archive.restore([champion], pool),
+    );
+
+    final out = await engine.run([champion]);
+    expect(out.error, 'probe unavailable');
+    expect(out.generations, 0);
+    expect(out.requestsUsed, 0);
+    expect(fake.batches, isEmpty);
+    expect(out.hallOfFame.single.genome.key, champion.key);
+    expect(out.hallOfFame.single.confirmations, 2);
+  });
+
+  test('подтверждение из новой probe-сессии добавляется к архиву', () async {
+    final champion = seeds.first;
+    final archive = EvolutionHall().mergeRecords([
+      _hallRecord(champion, confirmations: 1),
+    ]);
+    final fake = _FakeEvaluator();
+    final engine = EvolutionEngine(
+      evaluator: fake,
+      pools: pool,
+      settings: s(confirmations: 2, rungs: const [1]),
+      restored: archive.restore([champion], pool),
+    );
+
+    final out = await engine.run([champion]);
+    expect(fake.preparedFor.single.first.key, champion.key);
+    expect(fake.genomeBatches.single.first.key, champion.key);
+    expect(
+      engine.records.singleWhere((r) => r.key == champion.key).confirmations,
+      2,
+    );
+    expect(
+      engine.records.singleWhere((r) => r.key == champion.key).lifetime.attempts,
+      2,
+    );
+    expect(out.hallOfFame.single.confirmations, 2);
+  });
+
+  test('восстановление не меняет детерминированный порядок прогона', () async {
+    final archive = EvolutionHall().mergeRecords([
+      _hallRecord(seeds[0]),
+      _hallRecord(seeds[1], confirmations: 2),
+    ]);
+    final restored = archive.restore(seeds, pool);
+    final settings = s(
+      population: 8,
+      generations: 3,
+      rungs: const [1, 2],
+      seed: 42,
+    );
+    final firstFake = _FakeEvaluator();
+    final secondFake = _FakeEvaluator();
+    final first = await EvolutionEngine(
+      evaluator: firstFake,
+      pools: pool,
+      settings: settings,
+      restored: restored,
+    ).run(seeds);
+    final second = await EvolutionEngine(
+      evaluator: secondFake,
+      pools: pool,
+      settings: settings,
+      restored: restored,
+    ).run(seeds);
+
+    expect(secondFake.batches, firstFake.batches);
+    expect(
+      secondFake.genomeBatches.map((batch) => batch.map((g) => g.toJson()).toList()),
+      firstFake.genomeBatches.map((batch) => batch.map((g) => g.toJson()).toList()),
+    );
+    expect(second.hallOfFame.map((f) => f.genome.key),
+        first.hallOfFame.map((f) => f.genome.key));
+    expect(second.requestsUsed, first.requestsUsed);
+    expect(second.generations, first.generations);
+  });
+
+  test('подтверждённые приватные родители выбираются чаще', () async {
+    final high = privateSeed(tag: 'high-confidence');
+    final low = privateSeed(tag: 'low-confidence');
+    final archive = EvolutionHall().mergeRecords([
+      _hallRecord(high, confirmations: 9),
+      _hallRecord(low, confirmations: 1),
+    ]);
+    final restored = archive.restore([high, low], pool);
+    final settings = s(
+      population: 6,
+      generations: 2,
+      rungs: const [1],
+      confirmations: 1,
+      seed: 11,
+      useEda: false,
+    );
+    var highChildren = 0;
+    var lowChildren = 0;
+
+    for (var run = 0; run < 24; run++) {
+      final fake = _FakeEvaluator(
+        pass: (g) => g.key == high.key || g.key == low.key,
+      );
+      final engine = EvolutionEngine(
+        evaluator: fake,
+        pools: pool,
+        settings: settings.copyWith(seed: 100 + run),
+        restored: restored,
+      );
+      await engine.run([high, low]);
+      final children = fake.genomeBatches[1].whereType<GenomeVerbatim>();
+      highChildren += children.where((g) => g.tag == high.tag).length;
+      lowChildren += children.where((g) => g.tag == low.tag).length;
+    }
+
+    expect(highChildren, greaterThan(lowChildren));
+    expect(lowChildren, greaterThan(0));
+  });
+
+  test('вес приватного родителя ограничен после восьми подтверждений', () async {
+    final high = privateSeed(tag: 'high-confidence');
+    final low = privateSeed(tag: 'low-confidence');
+    const settings = EvolutionSettings(
+      populationSize: 6,
+      maxGenerations: 2,
+      maxRequests: 500,
+      rungAttempts: [1],
+      confirmationsNeeded: 1,
+      seed: 42,
+      useEda: false,
+    );
+
+    Future<List<List<String>>> run(int highConfirmations) async {
+      final archive = EvolutionHall().mergeRecords([
+        _hallRecord(high, confirmations: highConfirmations),
+        _hallRecord(low, confirmations: 1),
+      ]);
+      final fake = _FakeEvaluator(
+        pass: (g) => g.key == high.key || g.key == low.key,
+      );
+      await EvolutionEngine(
+        evaluator: fake,
+        pools: pool,
+        settings: settings,
+        restored: archive.restore([high, low], pool),
+      ).run([high, low]);
+      return fake.batches;
+    }
+
+    expect(await run(100), await run(9));
+  });
+}
+
+EvolutionHallRecord _hallRecord(Genome genome, {int confirmations = 1}) {
+  final fitness = Fitness(genome)
+    ..confirmations = confirmations
+    ..rungReached = 1;
+  for (var i = 0; i < confirmations; i++) {
+    fitness.add(const Observation(responded: true, status: 200, rttMs: 100));
+  }
+  return EvolutionHallRecord(
+    genome: genome,
+    fitness: fitness,
+    confirmations: confirmations,
+    bestRung: 1,
+  );
 }
 
 /// Посев, отличающийся РОВНО одним геном (DNS), чтобы `key` был уникальным, а

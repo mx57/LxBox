@@ -26,6 +26,7 @@ import 'dart:math';
 
 import 'allele_model.dart';
 import 'genome.dart';
+import 'hall_of_fame.dart';
 import 'objectives.dart';
 import 'pools.dart';
 import 'settings.dart';
@@ -160,7 +161,15 @@ class EvolutionEngine {
     this.onGeneration,
     this.onObservation,
     this.onNote,
-  });
+    Iterable<EvolutionHallRecord> restored = const [],
+  }) {
+    for (final record in restored) {
+      _records[record.genome.key] = EvoRecord(record.genome, record.fitness)
+        ..confirmations = record.confirmations
+        ..lastConfirmedGeneration = -1
+        ..bestRung = record.bestRung;
+    }
+  }
 
   final GenomeEvaluator evaluator;
 
@@ -233,12 +242,17 @@ class EvolutionEngine {
   Future<EvolutionOutcome> run(List<Genome> seeds) async {
     assert(!_started, 'EvolutionEngine is one-shot; create a new engine');
     _started = true;
-    final reason = await evaluator.prepareFor(seeds);
+    final uniqueSeeds = _dedupe([
+      for (final record in _records.values)
+        if (record.lifetime.attempts > 0) record.genome,
+      ...seeds,
+    ]);
+    final reason = await evaluator.prepareFor(uniqueSeeds);
     if (reason != null) {
       _error = reason;
       _note('старт невозможен: $reason');
       return EvolutionOutcome(
-        hallOfFame: const [],
+        hallOfFame: hallOfFame,
         stats: const [],
         requestsUsed: 0,
         generations: 0,
@@ -246,7 +260,6 @@ class EvolutionEngine {
       );
     }
     final rng = settings.rng();
-    final uniqueSeeds = _dedupe(seeds);
     _privateSeeds
       ..clear()
       ..addAll(uniqueSeeds.whereType<GenomeVerbatim>());
@@ -480,8 +493,13 @@ class EvolutionEngine {
     for (var i = 0; i < warpElites.length; i++) {
       feedEda(warpElites[i], 1.0 / (1.0 + i));
     }
-    for (final f in hallOfFame) {
-      if (!f.genome.isVerbatim) feedEda(f.genome, 0.25);
+    final archive = hallOfFame;
+    for (var i = 0; i < archive.length; i++) {
+      final f = archive[i];
+      if (f.genome.isVerbatim) continue;
+      final rankWeight = min(1.0, 1.0 / (1.0 + i));
+      final confirmationWeight = 1.0 + 0.25 * min(f.confirmations, 4);
+      feedEda(f.genome, rankWeight * confirmationWeight);
     }
     final model = AlleleModel.fit(
       [for (final e in eda.values) e.key],
@@ -547,7 +565,7 @@ class EvolutionEngine {
           ? _privateSeeds
           : verbatimElites;
       if (parent.isEmpty) break;
-      final source = parent[rng.nextInt(parent.length)];
+      final source = _pickPrivateParent(parent, rng);
       addPrivate(mutateVerbatim(source, pools, rng,
           mutationRate: settings.mutationRate,
           countries: settings.countries));
@@ -664,12 +682,30 @@ class EvolutionEngine {
         : (_privateSeeds.isNotEmpty ? _privateSeeds : const <GenomeVerbatim>[]);
     if (parents.isEmpty) return null;
     return mutateVerbatim(
-      parents[rng.nextInt(parents.length)],
+      _pickPrivateParent(parents, rng),
       pools,
       rng,
       mutationRate: 1,
       countries: settings.countries,
     );
+  }
+
+  GenomeVerbatim _pickPrivateParent(
+    List<GenomeVerbatim> parents,
+    Random rng,
+  ) {
+    if (parents.length == 1) return parents.first;
+    final weights = <int>[
+      for (final parent in parents)
+        1 + min(_records[parent.key]?.confirmations ?? 0, 8),
+    ];
+    final total = weights.fold<int>(0, (sum, weight) => sum + weight);
+    var ticket = rng.nextInt(total);
+    for (var i = 0; i < parents.length; i++) {
+      ticket -= weights[i];
+      if (ticket < 0) return parents[i];
+    }
+    return parents.last;
   }
 
   Genome? _takeReserve(bool private) {

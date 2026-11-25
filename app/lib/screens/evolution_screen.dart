@@ -12,9 +12,9 @@
 //   • кандидатов с одной пробой нельзя сравнивать с кандидатом с шестью — отсюда
 //     колонка «Probes» и shading ненадёжных значений.
 //
-// Ничего не сохраняется без нажатия: прогон пишет только в память экрана и в
-// журнал. Папку с победителями создаёт явная кнопка (см. [SubscriptionController]
-// .kEvolutionFolderName).
+// Папку с победителями создаёт явная кнопка (см. [SubscriptionController]
+// .kEvolutionFolderName). Безопасный архив подтверждений сохраняется отдельно
+// в `evo_hall`; тела узлов и их сетевые метаданные туда не попадают.
 //
 // Живые обновляются БЕЗ setState на каждое наблюдение (их сотни за кампанию):
 // данные пишутся в поля, а перерисовку даёт тикер 250 мс — тот же приём, что у
@@ -34,6 +34,7 @@ import '../models/node_spec.dart';
 import '../services/evolution/engine.dart';
 import '../services/evolution/export_check.dart';
 import '../services/evolution/genome.dart';
+import '../services/evolution/hall_of_fame.dart';
 import '../services/evolution/objectives.dart';
 import '../services/evolution/pools.dart';
 import '../services/evolution/probe_evaluator.dart';
@@ -90,6 +91,8 @@ class _EvolutionScreenState extends State<EvolutionScreen>
   List<GenerationSummary> _stats = const [];
   List<EvoRecord> _records = const [];
   List<Fitness> _hall = const [];
+  late EvolutionHall _archive = EvolutionHall();
+  List<EvolutionHallRecord> _restored = const [];
   EvolutionOutcome? _outcome;
 
   /// Фитнес ТЕКУЩЕГО поколения (ключ — [Genome.key]). Сбрасывается на первом
@@ -129,12 +132,19 @@ class _EvolutionScreenState extends State<EvolutionScreen>
 
   Future<void> _loadContext() async {
     EvolutionSettings loaded;
+    EvolutionHall archive;
     ScanPool? pool;
     List<DnsServerRef> dns = const [];
     try {
       loaded = await EvolutionSettings.load();
     } catch (_) {
       loaded = const EvolutionSettings();
+    }
+    try {
+      archive = await EvolutionHall.load();
+    } catch (_) {
+      archive = EvolutionHall();
+      _log.w('evo', 'hall of fame unavailable');
     }
     try {
       final raw = await rootBundle.loadString('assets/warp_endpoints.json');
@@ -155,9 +165,17 @@ class _EvolutionScreenState extends State<EvolutionScreen>
     if (!mounted) return;
     setState(() {
       _settings = loaded;
+      _archive = archive;
       _assetPool = pool;
       _dnsRefs = dns;
       _seeds = seeds;
+    });
+    if (!mounted) return;
+    final restored = _restoreFor(archive, seeds, loaded);
+    setState(() {
+      _restored = restored;
+      _records = _recordsOf(restored);
+      _hall = _confirmedOf(restored, loaded);
     });
     // Семена могли прийти после нажатия Start (рейс: экран открылся, пока
     // `_loadContext` ещё вернёт) — тогда ошибка «нет семян» оставлена
@@ -165,6 +183,64 @@ class _EvolutionScreenState extends State<EvolutionScreen>
     if (_seeds.genomes.isNotEmpty && _error != null) {
       setState(() => _error = null);
     }
+  }
+
+  List<EvolutionHallRecord> _restoreFor(
+    EvolutionHall archive,
+    SeedSet seeds,
+    EvolutionSettings settings,
+  ) {
+    final restored = archive.restore(
+      seeds.genomes,
+      _basePools(),
+      countries: settings.countries,
+    );
+    return [
+      for (final record in restored)
+        if ((settings.transports.isEmpty ||
+                settings.transports.contains(record.genome.transport)) &&
+            (record.genome.isVerbatim ||
+                settings.awgProfiles.isEmpty ||
+                settings.awgProfiles.contains(record.genome.awgProfile)))
+          record,
+    ];
+  }
+
+  List<Fitness> _confirmedOf(
+    Iterable<EvolutionHallRecord> records,
+    EvolutionSettings settings,
+  ) =>
+      [
+        for (final record in records)
+          if (record.confirmations >= settings.confirmationsNeeded)
+            record.fitness,
+      ];
+
+  List<EvoRecord> _recordsOf(Iterable<EvolutionHallRecord> records) => [
+        for (final record in records)
+          EvoRecord(record.genome, record.fitness)
+            ..confirmations = record.confirmations
+            ..lastConfirmedGeneration = -1
+            ..bestRung = record.bestRung,
+      ];
+
+  Future<EvolutionHall> _persistArchive(EvolutionEngine engine) async {
+    final next = _archive.mergeRecords([
+      for (final record in engine.records)
+        EvolutionHallRecord(
+          genome: record.genome,
+          fitness: record.lifetime,
+          confirmations: record.confirmations,
+          bestRung: record.bestRung,
+        ),
+    ]);
+    _archive = next;
+    try {
+      await next.save();
+    } catch (_) {
+      _log.w('evo', 'hall of fame persistence failed');
+    }
+    return next;
   }
 
   // ───────────────────────── пулы мутаций ─────────────────────────
@@ -205,11 +281,12 @@ class _EvolutionScreenState extends State<EvolutionScreen>
 
   Future<void> _start() async {
     if (_running || _preparing || _exporting) return;
-    if (_seeds.genomes.isEmpty) {
+    if (_seeds.genomes.isEmpty && _restored.isEmpty) {
       setState(() => _error = getLocalText.s(
           "There are no usable configs to evolve — generate or import WARP or WireGuard/AmneziaWG nodes first"));
       return;
     }
+    final restored = _restoreFor(_archive, _seeds, _settings);
     _ticker?.cancel();
     setState(() {
       _running = true;
@@ -218,12 +295,13 @@ class _EvolutionScreenState extends State<EvolutionScreen>
       _error = null;
       _outcome = null;
       _stats = const [];
-      _hall = const [];
+      _restored = restored;
+      _records = _recordsOf(restored);
+      _hall = _confirmedOf(restored, _settings);
       _generation = 0;
       _requestsUsed = 0;
       _live.clear();
       _liveGeneration = 0;
-      _records = const [];
       _statusKey = 'preparing';
     });
     _log.clear();
@@ -247,6 +325,7 @@ class _EvolutionScreenState extends State<EvolutionScreen>
       onGeneration: _onGeneration,
       onObservation: _onObservation,
       onNote: _onNote,
+      restored: restored,
     );
     _engine = engine;
     _startTicker();
@@ -264,6 +343,8 @@ class _EvolutionScreenState extends State<EvolutionScreen>
         error: '$e',
       );
     }
+    final archive = await _persistArchive(engine);
+    _restored = _restoreFor(archive, _seeds, _settings);
     if (!mounted) return;
     _ticker?.cancel();
     setState(() {
