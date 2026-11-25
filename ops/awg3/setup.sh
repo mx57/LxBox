@@ -79,6 +79,9 @@ cleanup() {
 trap cleanup EXIT
 printf '%s\n' "$client" > "$client_tmp"
 printf '%s\n' "$server" > "$server_tmp"
+# Container root has no DAC override after cap_drop; the 0700 runtime directory
+# remains the host-side privacy boundary for this ephemeral server config.
+chmod 0644 "$server_tmp"
 mv -f -- "$client_tmp" "$RUNTIME/client.conf"
 mv -f -- "$server_tmp" "$RUNTIME/server.conf"
 

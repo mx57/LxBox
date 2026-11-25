@@ -38,8 +38,11 @@ Generated files live only in `app/build/awg3-stand/`:
 - `client.sing-box.json`: configuration built by the test from the emitted node.
 - `stand.log`: line-buffered log with generated keys redacted.
 
-The directory is ignored by git. Never commit or upload its configuration, keys
-or binary. Review even the sanitized log before sharing it.
+The directory is ignored by git and has mode `0700`. The client configuration
+stays `0600`; only the ephemeral `server.conf` is `0644` so container root can
+read its bind mount after all Linux capabilities are dropped. Never commit or
+upload this directory's configuration, keys or binary. Review even the sanitized
+log before sharing it.
 
 The test owns the Compose project `lxbox-awg3-stand`. It tears down containers on
 success and failure. To stop the stand manually, run from the repository root:
