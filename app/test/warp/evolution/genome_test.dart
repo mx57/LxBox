@@ -115,6 +115,29 @@ void main() {
       );
     });
 
+    test('AWG3 keepalive range survives identity, copy and JSON', () {
+      const ranged = Genome(
+        transport: EvoTransport.awg,
+        endpoint: '162.159.192.7',
+        port: 2408,
+        keepalive: '25-35',
+      );
+      expect(ranged.tokens()[EvoLocus.keepalive], '25-35');
+      expect(Genome.fromTokens(ranged.tokens()).key, ranged.key);
+      expect(ranged.copyWith(port: 500).keepalive, '25-35');
+      expect(Genome.fromJson(ranged.toJson()).keepalive, '25-35');
+      expect(ranged.key, isNot(ranged.copyWith(keepalive: 25).key));
+    });
+
+    test('invalid keepalive normalizes to zero', () {
+      for (final value in ['', 'nope', '-1', '35-25', '4294967296']) {
+        final tokens = awg.tokens()..[EvoLocus.keepalive] = value;
+        expect(Genome.fromTokens(tokens).keepalive, 0, reason: value);
+      }
+      expect(awg.copyWith(keepalive: 'bad').keepalive, 0);
+      expect(Genome.fromJson({'keepalive': 'bad'}).keepalive, 0);
+    });
+
     test('distanceTo — доля различающихся локусов', () {
       expect(awg.distanceTo(awg), 0);
       expect(
@@ -163,6 +186,17 @@ void main() {
       final peer = (body['peers'] as List).first as Map<String, dynamic>;
       expect(peer.containsKey('persistent_keepalive_interval'), isFalse);
       expect(body.containsKey('mtu'), isFalse, reason: 'mtu=0 → ключ не пишем');
+    });
+
+    test('AWG3 keepalive range is written verbatim', () {
+      final body = const Genome(
+        transport: EvoTransport.awg,
+        endpoint: '162.159.192.7',
+        port: 2408,
+        keepalive: '25-35',
+      ).applyTo(awgBody());
+      final peer = (body['peers'] as List).first as Map<String, dynamic>;
+      expect(peer['persistent_keepalive_interval'], '25-35');
     });
 
     test('приманка AWG переписывается из генома', () {
@@ -259,6 +293,15 @@ void main() {
         isFalse,
         reason: 'пустой tls{} в тело не пишется',
       );
+    });
+
+    test('MASQUE rejects a ranged keepalive instead of writing N-Ms', () {
+      final ranged = h2.copyWith(keepalive: '25-35');
+      expect(ranged.keepalive, 0);
+      expect(ranged.tokens()[EvoLocus.keepalive], '0');
+      final base = masqueBody(vhttp: 'h2')..['keep_alive_period'] = '25s';
+      final body = ranged.applyTo(base);
+      expect(body.containsKey('keep_alive_period'), isFalse);
     });
 
     test('sni пуст → server_name удаляется, а не пишется пустым', () {

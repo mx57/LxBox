@@ -101,6 +101,41 @@ void main() {
       expect(g.sni, 'yandex.ru');
     });
 
+    test('AWG3 ranged keepalive survives seeding and body patching', () {
+      final node = WireguardSpec(
+        id: 'wg-ranged',
+        tag: 'wg-ranged',
+        label: 'ranged',
+        server: '162.159.192.7',
+        port: 2408,
+        rawSource: '',
+        privateKey: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaA=',
+        localAddresses: const ['172.16.0.2/32'],
+        peers: [
+          WireguardPeer(
+            publicKey: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbA=',
+            endpointHost: '162.159.192.7',
+            endpointPort: 2408,
+            persistentKeepalive: '25-35',
+          ),
+        ],
+        awg: const Awg({
+          'ip': 'quic',
+          'jc': 4,
+          'jmin': 40,
+          'jmax': 70,
+          'id': 'yandex.ru',
+          'ib': 'chrome',
+        }),
+      );
+      final genome = genomeOfNode(node)!;
+      expect(genome.keepalive, '25-35');
+      final body = node.emit(TemplateVars.empty).map;
+      final patched = genome.applyTo(body);
+      final peer = (patched['peers'] as List).first as Map<String, dynamic>;
+      expect(peer['persistent_keepalive_interval'], '25-35');
+    });
+
     test('warpCps узел распознаётся по CPS-полям, а не по одним I2..I5', () {
       final cps = genomeOfNode(awgNode(profile: AwgProfile.warpCps))!;
       expect(cps.awgProfile, AwgProfile.warpCps);

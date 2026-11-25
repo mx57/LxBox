@@ -21,7 +21,7 @@
 import 'dart:convert';
 import 'dart:math';
 
-import '../../models/node_spec.dart' show deepCopyJson;
+import '../../models/node_spec.dart' show Awg, deepCopyJson;
 import '../contract/body_sanitizer.dart' show fieldAllowedOn;
 import '../warp/awg_profile.dart';
 import '../warp/scan/scan_models.dart';
@@ -104,6 +104,22 @@ class Genome {
     this.dnsTag = '',
   });
 
+  static Object normalizeKeepalive(Object? value, {required bool allowRange}) {
+    final Object? parsed;
+    if (value is int) {
+      parsed = value;
+    } else if (value is double) {
+      if (!value.isFinite) return 0;
+      parsed = value.toInt();
+    } else if (value is String) {
+      parsed = Awg.parseAwg3Range(value);
+    } else {
+      return 0;
+    }
+    if (parsed is int) return parsed > 0 ? parsed : 0;
+    return allowRange && parsed is String ? parsed : 0;
+  }
+
   final EvoTransport transport;
 
   /// §740 — профиль WARP-декоя. Для MASQUE не влияет на тело.
@@ -116,9 +132,10 @@ class Genome {
   /// SNI/MASQUE `tls.server_name` (для AWG — приманка `id`).
   final String sni;
 
-  /// WG/AWG: `peers[].persistent_keepalive_interval`, сек. MASQUE:
-  /// `keep_alive_period` (сек). `0` — не писать.
-  final int keepalive;
+  /// WG/AWG: `peers[].persistent_keepalive_interval`, сек. — положительное
+  /// число или AWG3-диапазон `"N-M"`. MASQUE: `keep_alive_period`, только
+  /// положительное число. `0` — не писать.
+  final Object keepalive;
 
   /// `mtu` интерфейса. `0` — не писать (у MASQUE билдер пишет 1280).
   final int mtu;
@@ -168,7 +185,8 @@ class Genome {
         EvoLocus.endpoint: endpoint,
         EvoLocus.port: '$port',
         EvoLocus.sni: sni,
-        EvoLocus.keepalive: '$keepalive',
+        EvoLocus.keepalive:
+            '${normalizeKeepalive(keepalive, allowRange: !transport.isMasque)}',
         EvoLocus.mtu: '$mtu',
         EvoLocus.junkProto: junkProto,
         EvoLocus.junkBrowser: junkBrowser,
@@ -182,25 +200,31 @@ class Genome {
         EvoLocus.dns: dnsTag,
       };
 
-  static Genome fromTokens(GeneTokens t) => Genome(
-        transport: EvoTransport.fromWire(t[EvoLocus.transport] ?? 'awg'),
-        awgProfile: AwgProfile.fromWire(t[EvoLocus.awgProfile]),
-        endpoint: t[EvoLocus.endpoint] ?? '',
-        port: int.tryParse(t[EvoLocus.port] ?? '') ?? 2408,
-        sni: t[EvoLocus.sni] ?? '',
-        keepalive: int.tryParse(t[EvoLocus.keepalive] ?? '') ?? 0,
-        mtu: int.tryParse(t[EvoLocus.mtu] ?? '') ?? 0,
-        junkProto: t[EvoLocus.junkProto] ?? 'quic',
-        junkBrowser: t[EvoLocus.junkBrowser] ?? 'chrome',
-        junkDomain: t[EvoLocus.junkDomain] ?? '',
-        jc: int.tryParse(t[EvoLocus.jc] ?? '') ?? 4,
-        jitterMin: int.tryParse(t[EvoLocus.jitterMin] ?? '') ?? 40,
-        jitterMax: int.tryParse(t[EvoLocus.jitterMax] ?? '') ?? 70,
-        fragment: t[EvoLocus.fragment] == '1',
-        recordFragment: t[EvoLocus.recordFragment] == '1',
-        sniCase: int.tryParse(t[EvoLocus.sniCase] ?? '') ?? 0,
-        dnsTag: t[EvoLocus.dns] ?? '',
-      );
+  static Genome fromTokens(GeneTokens t) {
+    final transport = EvoTransport.fromWire(t[EvoLocus.transport] ?? 'awg');
+    return Genome(
+      transport: transport,
+      awgProfile: AwgProfile.fromWire(t[EvoLocus.awgProfile]),
+      endpoint: t[EvoLocus.endpoint] ?? '',
+      port: int.tryParse(t[EvoLocus.port] ?? '') ?? 2408,
+      sni: t[EvoLocus.sni] ?? '',
+      keepalive: normalizeKeepalive(
+        t[EvoLocus.keepalive],
+        allowRange: !transport.isMasque,
+      ),
+      mtu: int.tryParse(t[EvoLocus.mtu] ?? '') ?? 0,
+      junkProto: t[EvoLocus.junkProto] ?? 'quic',
+      junkBrowser: t[EvoLocus.junkBrowser] ?? 'chrome',
+      junkDomain: t[EvoLocus.junkDomain] ?? '',
+      jc: int.tryParse(t[EvoLocus.jc] ?? '') ?? 4,
+      jitterMin: int.tryParse(t[EvoLocus.jitterMin] ?? '') ?? 40,
+      jitterMax: int.tryParse(t[EvoLocus.jitterMax] ?? '') ?? 70,
+      fragment: t[EvoLocus.fragment] == '1',
+      recordFragment: t[EvoLocus.recordFragment] == '1',
+      sniCase: int.tryParse(t[EvoLocus.sniCase] ?? '') ?? 0,
+      dnsTag: t[EvoLocus.dns] ?? '',
+    );
+  }
 
   Genome copyWith({
     EvoTransport? transport,
@@ -208,7 +232,7 @@ class Genome {
     String? endpoint,
     int? port,
     String? sni,
-    int? keepalive,
+    Object? keepalive,
     int? mtu,
     String? junkProto,
     String? junkBrowser,
@@ -220,26 +244,31 @@ class Genome {
     bool? recordFragment,
     int? sniCase,
     String? dnsTag,
-  }) =>
-      Genome(
-        transport: transport ?? this.transport,
-        awgProfile: awgProfile ?? this.awgProfile,
-        endpoint: endpoint ?? this.endpoint,
-        port: port ?? this.port,
-        sni: sni ?? this.sni,
-        keepalive: keepalive ?? this.keepalive,
-        mtu: mtu ?? this.mtu,
-        junkProto: junkProto ?? this.junkProto,
-        junkBrowser: junkBrowser ?? this.junkBrowser,
-        junkDomain: junkDomain ?? this.junkDomain,
-        jc: jc ?? this.jc,
-        jitterMin: jitterMin ?? this.jitterMin,
-        jitterMax: jitterMax ?? this.jitterMax,
-        fragment: fragment ?? this.fragment,
-        recordFragment: recordFragment ?? this.recordFragment,
-        sniCase: sniCase ?? this.sniCase,
-        dnsTag: dnsTag ?? this.dnsTag,
-      );
+  }) {
+    final nextTransport = transport ?? this.transport;
+    return Genome(
+      transport: nextTransport,
+      awgProfile: awgProfile ?? this.awgProfile,
+      endpoint: endpoint ?? this.endpoint,
+      port: port ?? this.port,
+      sni: sni ?? this.sni,
+      keepalive: normalizeKeepalive(
+        keepalive ?? this.keepalive,
+        allowRange: !nextTransport.isMasque,
+      ),
+      mtu: mtu ?? this.mtu,
+      junkProto: junkProto ?? this.junkProto,
+      junkBrowser: junkBrowser ?? this.junkBrowser,
+      junkDomain: junkDomain ?? this.junkDomain,
+      jc: jc ?? this.jc,
+      jitterMin: jitterMin ?? this.jitterMin,
+      jitterMax: jitterMax ?? this.jitterMax,
+      fragment: fragment ?? this.fragment,
+      recordFragment: recordFragment ?? this.recordFragment,
+      sniCase: sniCase ?? this.sniCase,
+      dnsTag: dnsTag ?? this.dnsTag,
+    );
+  }
 
   Map<String, dynamic> toJson() => {'key': key, ..._typed()};
 
@@ -249,7 +278,8 @@ class Genome {
         'endpoint': endpoint,
         'port': port,
         'sni': sni,
-        'keepalive': keepalive,
+        'keepalive':
+            normalizeKeepalive(keepalive, allowRange: !transport.isMasque),
         'mtu': mtu,
         'junkProto': junkProto,
         'junkBrowser': junkBrowser,
@@ -263,25 +293,31 @@ class Genome {
         'dnsTag': dnsTag,
       };
 
-  static Genome fromJson(Map<String, dynamic> j) => Genome(
-        transport: EvoTransport.fromWire('${j['transport'] ?? 'awg'}'),
-        awgProfile: AwgProfile.fromWire(j['awgProfile'] as String?),
-        endpoint: '${j['endpoint'] ?? ''}',
-        port: (j['port'] as num?)?.toInt() ?? 2408,
-        sni: '${j['sni'] ?? ''}',
-        keepalive: (j['keepalive'] as num?)?.toInt() ?? 0,
-        mtu: (j['mtu'] as num?)?.toInt() ?? 0,
-        junkProto: '${j['junkProto'] ?? 'quic'}',
-        junkBrowser: '${j['junkBrowser'] ?? 'chrome'}',
-        junkDomain: '${j['junkDomain'] ?? ''}',
-        jc: (j['jc'] as num?)?.toInt() ?? 4,
-        jitterMin: (j['jitterMin'] as num?)?.toInt() ?? 40,
-        jitterMax: (j['jitterMax'] as num?)?.toInt() ?? 70,
-        fragment: j['fragment'] == true,
-        recordFragment: j['recordFragment'] == true,
-        sniCase: (j['sniCase'] as num?)?.toInt() ?? 0,
-        dnsTag: '${j['dnsTag'] ?? ''}',
-      );
+  static Genome fromJson(Map<String, dynamic> j) {
+    final transport = EvoTransport.fromWire('${j['transport'] ?? 'awg'}');
+    return Genome(
+      transport: transport,
+      awgProfile: AwgProfile.fromWire(j['awgProfile'] as String?),
+      endpoint: '${j['endpoint'] ?? ''}',
+      port: (j['port'] as num?)?.toInt() ?? 2408,
+      sni: '${j['sni'] ?? ''}',
+      keepalive: normalizeKeepalive(
+        j['keepalive'],
+        allowRange: !transport.isMasque,
+      ),
+      mtu: (j['mtu'] as num?)?.toInt() ?? 0,
+      junkProto: '${j['junkProto'] ?? 'quic'}',
+      junkBrowser: '${j['junkBrowser'] ?? 'chrome'}',
+      junkDomain: '${j['junkDomain'] ?? ''}',
+      jc: (j['jc'] as num?)?.toInt() ?? 4,
+      jitterMin: (j['jitterMin'] as num?)?.toInt() ?? 40,
+      jitterMax: (j['jitterMax'] as num?)?.toInt() ?? 70,
+      fragment: j['fragment'] == true,
+      recordFragment: j['recordFragment'] == true,
+      sniCase: (j['sniCase'] as num?)?.toInt() ?? 0,
+      dnsTag: '${j['dnsTag'] ?? ''}',
+    );
+  }
 
   String get json => jsonEncode(_typed());
 
@@ -340,12 +376,13 @@ class Genome {
   Map<String, dynamic> applyTo(Map<String, dynamic> base) {
     final body = deepCopyJson(base) as Map<String, dynamic>;
     final isMasque = body['type'] == 'masque';
+    final ka = normalizeKeepalive(keepalive, allowRange: !isMasque);
     if (isMasque) {
       body['server'] = endpoint;
       body['server_port'] = port;
       body['vhttp'] = transport == EvoTransport.masqueH3 ? 'h3' : 'h2';
-      if (keepalive > 0) {
-        body['keep_alive_period'] = '${keepalive}s';
+      if (ka is int && ka > 0) {
+        body['keep_alive_period'] = '${ka}s';
       } else {
         body.remove('keep_alive_period');
       }
@@ -372,8 +409,8 @@ class Genome {
     for (final p in peers) {
       p['address'] = endpoint;
       p['port'] = port;
-      if (keepalive > 0) {
-        p['persistent_keepalive_interval'] = keepalive;
+      if (ka != 0) {
+        p['persistent_keepalive_interval'] = ka;
       } else {
         p.remove('persistent_keepalive_interval');
       }

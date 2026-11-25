@@ -165,8 +165,10 @@ Genome? _fromWireguard(Map<String, dynamic> body) {
     jc: (body['jc'] as num?)?.toInt() ?? 4,
     jitterMin: (body['jmin'] as num?)?.toInt() ?? 40,
     jitterMax: (body['jmax'] as num?)?.toInt() ?? 70,
-    keepalive:
-        (peers.first['persistent_keepalive_interval'] as num?)?.toInt() ?? 0,
+    keepalive: Genome.normalizeKeepalive(
+      peers.first['persistent_keepalive_interval'],
+      allowRange: true,
+    ),
     mtu: (body['mtu'] as num?)?.toInt() ?? 0,
   );
 }
