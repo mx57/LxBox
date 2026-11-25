@@ -40,7 +40,8 @@ class Observation {
   /// Сколько HTTP-запросов ушло на ВЕРДИКТ, а не на одну попытку: проба
   /// чередует источники гео (§844 — на зарезанном DNS один источник означает
   /// «не ответило всё»), а бюджет прогона считается именно в запросах. Без
-  /// этого поля «0 % проходимых» выглядел бы дешевле, чем он стоил.
+  /// этого поля «0 % проходимых» выглядел бы дешевле, чем он стоил. `0` — чисто
+  /// диагностическая метка без выполненного HTTP-запроса.
   final int requests;
 
   final bool responded;
@@ -144,7 +145,7 @@ class Fitness {
   void add(Observation o) {
     _observations.add(o);
     attempts++;
-    requestsUsed += o.requests <= 0 ? 1 : o.requests;
+    requestsUsed += o.requests;
     if (!o.responded) {
       if (o.error.isNotEmpty) _errors.add(o.error);
       return;

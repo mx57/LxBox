@@ -423,12 +423,32 @@ class Genome {
     // AWG-поля живут в корне endpoint'а (Awg.writeInto). Голый WG (без `jc`)
     // мутация приманки не касается: добавлять их к WG-узлу нельзя.
     if (body.containsKey('jc') || body.containsKey('ip')) {
-      body['ip'] = junkProto;
-      body['id'] = junkDomain.isNotEmpty ? junkDomain : sni;
-      if (junkProto == 'quic') {
-        body['ib'] = junkBrowser;
-      } else {
-        body.remove('ib');
+      if (!body.containsKey('i1')) {
+        final proto = _masqueradeValue(junkProto, body['ip']);
+        final domain = _masqueradeValue(
+          junkDomain.isNotEmpty ? junkDomain : sni,
+          body['id'],
+        );
+        if (proto != null) {
+          body['ip'] = proto;
+        } else {
+          body.remove('ip');
+        }
+        if (domain != null) {
+          body['id'] = domain;
+        } else {
+          body.remove('id');
+        }
+        if (proto == 'quic') {
+          final browser = _masqueradeValue(junkBrowser, body['ib']);
+          if (browser != null) {
+            body['ib'] = browser;
+          } else {
+            body.remove('ib');
+          }
+        } else {
+          body.remove('ib');
+        }
       }
       body['jc'] = jc;
       body['jmin'] = jitterMin;
@@ -459,6 +479,11 @@ class Genome {
     if (canFragment) tls['fragment'] = true;
     if (canRecord) tls['record_fragment'] = true;
     tls['fragment_fallback_delay'] = '500ms';
+  }
+
+  String? _masqueradeValue(String gene, Object? base) {
+    final value = gene.isNotEmpty ? gene : base;
+    return value is String && value.isNotEmpty ? value : null;
   }
 
   Map<String, dynamic> _tlsBlock(Map<String, dynamic> body) {

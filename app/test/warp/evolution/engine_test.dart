@@ -148,19 +148,56 @@ void main() {
     expect(out.requestsUsed, 6);
   });
 
-  test('бюджет запросов — валюта прогона: перерасход ограничен одним рангом',
+  test('бюджет останавливает rung между пробами и сохраняет позиции',
       () async {
-    final fake = _FakeEvaluator();
+    final fake = _FakeEvaluator(requestsPerProbe: 3);
     final engine = EvolutionEngine(
         evaluator: fake,
         pools: pool,
         settings: s(rungs: const [1, 2, 3], maxRequests: 10, generations: 8));
     final out = await engine.run(seeds);
-    // Ранг проверяет бюджет ДО запуска, поэтому первый ранг (6) и второй (6)
-    // оплачиваются целиком, а третий уже нет: итог — 12 при потолке 10.
-    expect(fake.attempts, [1, 2]);
-    expect(out.requestsUsed, 12);
+    final batch = fake.batches.single;
+    expect(fake.attempts, [1], reason: 'следующий ранг уже не стартует');
+    expect(fake.probed, batch.take(4),
+        reason: 'четыре вердикта по 3 запроса исчерпывают бюджет 10');
+    expect(out.requestsUsed, 12,
+        reason: 'перерасход ограничен одной уже начатой пробой-серией');
     expect(out.generations, 1);
+    expect(out.stats.single.evaluated, 6);
+    expect(out.stats.single.alive, 4);
+    for (final key in batch.skip(4)) {
+      final record = engine.records.singleWhere((r) => r.key == key);
+      expect(record.lifetime.lastError, 'budget exhausted');
+      expect(record.lifetime.requestsUsed, 0,
+          reason: 'диагностическая метка не является HTTP-запросом');
+    }
+  });
+
+  test('бюджет проверяется и между попытками одной особи', () async {
+    final fake = _FakeEvaluator();
+    final engine = EvolutionEngine(
+        evaluator: fake,
+        pools: pool,
+        settings: s(rungs: const [3], maxRequests: 4));
+    final out = await engine.run(seeds);
+    final batch = fake.batches.single;
+    expect(fake.probed, [
+      batch[0],
+      batch[0],
+      batch[0],
+      batch[1],
+    ]);
+    expect(out.requestsUsed, 4);
+    expect(engine.records.singleWhere((r) => r.key == batch[0]).lifetime.attempts,
+        3);
+    expect(engine.records.singleWhere((r) => r.key == batch[1]).lifetime.attempts,
+        1);
+    expect(
+        engine.records
+            .singleWhere((r) => r.key == batch[2])
+            .lifetime
+            .lastError,
+        'budget exhausted');
   });
 
   test('отмена останавливает движок между рангами', () async {
@@ -175,6 +212,62 @@ void main() {
     expect(out.cancelled, isTrue);
     expect(fake.attempts, [1], reason: 'второй ранг уже не стартует');
     expect(out.generations, 1);
+  });
+
+  test('исключение оценщика помечает ранг техническим сбоем, не убивая прогон',
+      () async {
+    final fake = _FakeEvaluator(throwOnBatch: 2);
+    final notes = <String>[];
+    final engine = EvolutionEngine(
+      evaluator: fake,
+      pools: pool,
+      settings: s(rungs: const [1, 2, 3]),
+      onNote: notes.add,
+    );
+    final out = await engine.run(seeds);
+    expect(out.error, isNull);
+    expect(out.generations, 1);
+    expect(fake.attempts, [1, 2, 3],
+        reason: 'уже подтверждённые первым рангом особи продолжают поиск');
+    expect(out.stats.single.failureReasons, contains('probe session:'));
+    expect(notes.any((n) => n.contains('технический сбой')), isTrue);
+    expect(out.hallOfFame, isNotEmpty,
+        reason: 'результаты первого ранга не теряются вместе с исключением');
+  });
+
+  test('частичный технический сбой не сдвигает результаты кандидатов',
+      () async {
+    final fake = _FakeEvaluator(throwAfterProbe: 1);
+    final engine = EvolutionEngine(
+        evaluator: fake,
+        pools: pool,
+        settings: s(rungs: const [2]));
+    final out = await engine.run(seeds);
+    final batch = fake.batches.single;
+    expect(out.requestsUsed, 1);
+    for (var i = 0; i < batch.length; i++) {
+      final f = engine.records.singleWhere((r) => r.key == batch[i]).lifetime;
+      expect(f.attempts, i == 0 ? 2 : 1, reason: batch[i]);
+      expect(f.lastError, 'probe session: Bad state: probe exploded mid-rung');
+    }
+    expect(
+        engine.records
+            .singleWhere((r) => r.key == batch.first)
+            .lifetime
+            .observations
+            .first
+            .responded,
+        isTrue);
+  });
+
+  test('EvolutionEngine одноразовый', () async {
+    final fake = _FakeEvaluator();
+    final engine =
+        EvolutionEngine(evaluator: fake, pools: pool, settings: s());
+    await engine.run(seeds);
+    final batchesBefore = fake.batches.length;
+    await expectLater(engine.run(seeds), throwsAssertionError);
+    expect(fake.batches, hasLength(batchesBefore));
   });
 
   test('пауза держит движок до resume, но не навсегда', () async {
@@ -392,6 +485,8 @@ class _FakeEvaluator implements GenomeEvaluator {
     this.prepareReason,
     this.truncate = false,
     this.requestsPerProbe = 1,
+    this.throwOnBatch = 0,
+    this.throwAfterProbe = 0,
   });
 
   /// null — все пробы проходят.
@@ -406,11 +501,18 @@ class _FakeEvaluator implements GenomeEvaluator {
   /// Возвращать оценки только для половины особей (урезанный ответ ядра).
   final bool truncate;
 
+  /// Бросить исключение на этом rang-е (нумерация с единицы).
+  final int throwOnBatch;
+
+  /// Бросить исключение после стольких реальных проб.
+  final int throwAfterProbe;
+
   /// Вызывается перед выдачей проб — отсюда тесты отменяют и ставят паузу.
   void Function()? beforeEvaluate;
 
   final List<List<String>> batches = [];
   final List<int> attempts = [];
+  final List<String> probed = [];
   int disposes = 0;
 
   @override
@@ -425,31 +527,56 @@ class _FakeEvaluator implements GenomeEvaluator {
     required int attempts,
     void Function(int index, Observation observation)? onOne,
     bool Function()? cancelled,
+    bool Function()? budgetExceeded,
   }) async {
     batches.add([for (final g in genomes) g.key]);
     this.attempts.add(attempts);
     beforeEvaluate?.call();
+    if (throwOnBatch > 0 && batches.length == throwOnBatch) {
+      throw StateError('probe exploded');
+    }
 
+    final limit = truncate ? (genomes.length / 2).ceil() : genomes.length;
     final out = <List<Observation>>[];
+    var stopped = false;
     for (var i = 0; i < genomes.length; i++) {
-      final ok = (pass ?? (_) => true)(genomes[i]);
-      final list = [
-        for (var a = 0; a < attempts; a++)
-          ok
-              ? Observation(
-                  responded: true,
-                  status: 200,
-                  rttMs: rtt,
-                  country: country,
-                  requests: requestsPerProbe)
-              : Observation.failed('timeout', requests: requestsPerProbe),
-      ];
-      for (final o in list) {
-        onOne?.call(i, o);
+      final list = <Observation>[];
+      for (var a = 0; a < attempts; a++) {
+        if ((cancelled?.call() ?? false) ||
+            (budgetExceeded?.call() ?? false)) {
+          stopped = true;
+          break;
+        }
+        final ok = (pass ?? (_) => true)(genomes[i]);
+        final o = ok
+            ? Observation(
+                responded: true,
+                status: 200,
+                rttMs: rtt,
+                country: country,
+                requests: requestsPerProbe)
+            : Observation.failed('timeout', requests: requestsPerProbe);
+        list.add(o);
+        probed.add(genomes[i].key);
+        if (i < limit) onOne?.call(i, o);
+        if (throwAfterProbe > 0 && probed.length == throwAfterProbe) {
+          throw StateError('probe exploded mid-rung');
+        }
       }
       out.add(list);
     }
-    if (!truncate) return out;
-    return out.sublist(0, (out.length / 2).ceil());
+    if (stopped) {
+      for (var i = 0; i < genomes.length; i++) {
+        if (out[i].isNotEmpty) continue;
+        final reason = (budgetExceeded?.call() ?? false)
+            ? 'budget exhausted'
+            : 'cancelled before probe';
+        final o = Observation.failed(reason, requests: 0);
+        out[i].add(o);
+        onOne?.call(i, o);
+      }
+      return out;
+    }
+    return truncate ? out.sublist(0, limit) : out;
   }
 }

@@ -255,6 +255,52 @@ void main() {
       expect(body['id'], 'sni.ru');
     });
 
+    test('пустые masquerade-гены наследуют непустые значения базы', () {
+      final base = awgBody()
+        ..['id'] = 'www.google.com'
+        ..['ib'] = 'firefox';
+      final body = const Genome(
+        transport: EvoTransport.awg,
+        endpoint: '1.1.1.1',
+        port: 2408,
+        junkProto: '',
+        junkBrowser: '',
+      ).applyTo(base);
+      expect(body['ip'], 'quic');
+      expect(body['id'], 'www.google.com');
+      expect(body['ib'], 'firefox');
+    });
+
+    test('пустая приманка не создаёт id, если в базе его нет', () {
+      final base = awgBody()
+        ..remove('id')
+        ..remove('ip')
+        ..remove('ib');
+      final body = const Genome(
+        transport: EvoTransport.awg,
+        endpoint: '1.1.1.1',
+        port: 2408,
+        junkProto: '',
+        junkBrowser: '',
+      ).applyTo(base);
+      expect(body.containsKey('id'), isFalse);
+      expect(body.containsKey('ip'), isFalse);
+      expect(body.containsKey('ib'), isFalse);
+    });
+
+    test('явный i1 блокирует запись masquerade-генов', () {
+      final base = awgBody()
+        ..remove('ip')
+        ..remove('id')
+        ..remove('ib')
+        ..['i1'] = '<b 0x01><r 32>';
+      final body = awg.applyTo(base);
+      expect(body['i1'], '<b 0x01><r 32>');
+      expect(body.containsKey('ip'), isFalse);
+      expect(body.containsKey('id'), isFalse);
+      expect(body.containsKey('ib'), isFalse);
+    });
+
     test('голый WG (без jc/ip) приманки не получает', () {
       final plain = awgBody()
         ..remove('jc')

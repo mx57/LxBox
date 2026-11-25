@@ -104,6 +104,13 @@ void main() {
       [2],
     );
     expect(
+      EvolutionSettings.fromJson(const {
+        'rungAttempts': [0, -1],
+      }).rungAttempts,
+      [1, 2, 3],
+      reason: 'пустые ранги не должны превращать поколения в холостой прогон',
+    );
+    expect(
         EvolutionSettings.fromJson(const {'maxRequests': 'oops'}).maxRequests,
       1080,
     );

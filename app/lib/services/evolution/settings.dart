@@ -211,14 +211,15 @@ class EvolutionSettings {
   static EvolutionSettings fromJson(Map<String, dynamic> j) {
     List<String> strs(Object? v) =>
         v is List ? [for (final e in v) '$e'] : const [];
+    final rungs = [
+      for (final e in (j['rungAttempts'] as List? ?? const [1, 2, 3]))
+        _int(e, 1),
+    ].where((e) => e > 0).toList();
     return EvolutionSettings(
       populationSize: _int(j['populationSize'], 16),
       maxGenerations: _int(j['maxGenerations'], 8),
       maxRequests: _int(j['maxRequests'], 1080),
-      rungAttempts: [
-        for (final e in (j['rungAttempts'] as List? ?? const [1, 2, 3]))
-          _int(e, 1),
-      ].where((e) => e > 0).toList(),
+      rungAttempts: rungs.isEmpty ? const [1, 2, 3] : rungs,
       rungKeepFraction: _double(j['rungKeepFraction'], 0.5),
       eliteFraction: _double(j['eliteFraction'], 0.35),
       mutationRate: _double(j['mutationRate'], 0.12),

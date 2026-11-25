@@ -184,6 +184,7 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
     required int attempts,
     void Function(int index, Observation observation)? onOne,
     bool Function()? cancelled,
+    bool Function()? budgetExceeded,
   }) async {
     final out = [for (var i = 0; i < genomes.length; i++) <Observation>[]];
     final builder = _builder;
@@ -195,7 +196,10 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
       }
       return out;
     }
-    bool stopped() => _stopped || (cancelled?.call() ?? false);
+    bool stopped() =>
+        _stopped ||
+        (cancelled?.call() ?? false) ||
+        (budgetExceeded?.call() ?? false);
 
     // Особи с разным геном DNS расходятся по разным сессиям: одна probe-сессия
     // имеет ОДИН default_domain_resolver, иначе «ген DNS» ничего не означал бы.
@@ -228,10 +232,13 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
       void closeUnprobed() {
         for (final i in indexes) {
           if (out[i].isNotEmpty) continue;
-          final o = Observation.failed(why[i] ??
-              (stopped()
-                  ? 'cancelled before probe'
-                  : 'no probe slot in session'));
+          final reason = why[i] ??
+              ((budgetExceeded?.call() ?? false)
+                  ? 'budget exhausted'
+                  : (stopped()
+                      ? 'cancelled before probe'
+                      : 'no probe slot in session'));
+          final o = Observation.failed(reason, requests: 0);
           out[i].add(o);
           onOne?.call(i, o);
           log.w('evo', '${genomes[i].shortLabel}: пробы не было (${o.error})');

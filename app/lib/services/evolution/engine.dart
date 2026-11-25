@@ -43,12 +43,18 @@ abstract class GenomeEvaluator {
 
   /// [attempts] проб на каждый геном. Возвращает наблюдения ПО ИНДЕКСУ входа
   /// (короткий список = пробы не дошли). Наблюдения прилетают и через [onOne],
-  /// чтобы UI жил во время долгого rung'а.
+  /// чтобы UI жил во время долгого rung'а. [onOne] вызывается до возврата и в
+  /// том же порядке, что и наблюдения этого индекса в результате.
+  ///
+  /// Оценщик проверяет [cancelled] и [budgetExceeded] между узлами и пробами.
+  /// При остановке он возвращает уже сделанные наблюдения и добавляет честный
+  /// `Observation.failed` тем, кто остался без пробы.
   Future<List<List<Observation>>> evaluate(
     List<Genome> genomes, {
     required int attempts,
     void Function(int index, Observation observation)? onOne,
     bool Function()? cancelled,
+    bool Function()? budgetExceeded,
   });
 
   /// Сброс ресурсов. Владелец — экран: движок НЕ гасит оценщик между
@@ -140,6 +146,8 @@ class EvolutionOutcome {
   final bool cancelled;
 }
 
+/// Одноразовый прогон: архив, статистика и счётчик бюджета принадлежат одному
+/// экземпляру. Для нового запуска экран создаёт новый [EvolutionEngine].
 class EvolutionEngine {
   EvolutionEngine({
     required this.evaluator,
@@ -171,6 +179,7 @@ class EvolutionEngine {
   final _reserve = <Genome>[];
 
   bool _cancelled = false;
+  bool _started = false;
   Completer<void>? _pauseGate;
   int _requestsUsed = 0;
   String _error = '';
@@ -216,6 +225,8 @@ class EvolutionEngine {
   }
 
   Future<EvolutionOutcome> run(List<Genome> seeds) async {
+    assert(!_started, 'EvolutionEngine is one-shot; create a new engine');
+    _started = true;
     final reason = await evaluator.prepare();
     if (reason != null) {
       _error = reason;
@@ -274,29 +285,51 @@ class EvolutionEngine {
         break;
       }
       final batch = [for (final k in tier) current[k]!.genome];
-      final results = await evaluator.evaluate(
-        batch,
-        attempts: attempts,
-        cancelled: () => _cancelled,
-        onOne: (i, o) {
-          if (i < 0 || i >= batch.length) return;
-          onObservation?.call(batch[i], current[batch[i].key]!, rung);
-        },
-      );
+      final streamed = <int, List<Observation>>{};
+      late final List<List<Observation>> results;
+      try {
+        results = await evaluator.evaluate(
+          batch,
+          attempts: attempts,
+          cancelled: () => _cancelled,
+          budgetExceeded: () => _requestsUsed >= settings.maxRequests,
+          onOne: (i, o) {
+            if (i < 0 || i >= batch.length) return;
+            (streamed[i] ??= <Observation>[]).add(o);
+            // Следующая проба не должна стартовать, пока её цена ещё не учтена.
+            _requestsUsed += o.requests;
+            onObservation?.call(batch[i], current[batch[i].key]!, rung);
+          },
+        );
+      } catch (e) {
+        final reason = 'probe session: $e';
+        _note('rung ${rung + 1}: технический сбой оценщика ($e)');
+        results = [
+          for (var i = 0; i < batch.length; i++)
+            [
+              ...?streamed[i],
+              if ((streamed[i]?.length ?? 0) < attempts)
+                Observation.failed(reason, requests: 0),
+            ],
+        ];
+      }
       rung++;
       var aliveKeys = <String>[];
       for (var i = 0; i < batch.length; i++) {
         final g = batch[i];
         final f = current[g.key]!;
-        final obs = i < results.length ? results[i] : const <Observation>[];
+        final notified = streamed[i] ?? const <Observation>[];
+        final returned = i < results.length ? results[i] : const <Observation>[];
+        final extra = returned.length > notified.length
+            ? returned.skip(notified.length)
+            : const Iterable<Observation>.empty();
+        final obs = [...notified, ...extra];
+        for (final o in extra) {
+          _requestsUsed += o.requests;
+        }
         for (final o in obs) {
           f.add(o);
         }
-        // Бюджет — в ЗАПРОСАХ (валюта прогона): вердикт одной особи может стоить
-        // не одного GET'а, а столько, сколько источников гео проба перебрала
-        // (§844), поэтому считаем [Observation.requests], а не число вердиктов.
-        _requestsUsed +=
-            obs.fold<int>(0, (a, o) => a + (o.requests <= 0 ? 1 : o.requests));
         final rec = _records.putIfAbsent(g.key, () => EvoRecord(g, Fitness(g)));
         if (f.passRate >= settings.minPassRate &&
             rec.lastConfirmedGeneration != generation) {
@@ -380,15 +413,26 @@ class EvolutionEngine {
     // Предложение: архив славы во вход EDA — победы, подтверждённые сессиями,
     // должны тоже формировать распределение новых геномов (чуть слабее элиты).
     final hofGenomes = hallOfFame.map((f) => f.genome).toList();
+    // Одна особь может быть и элитой, и HoF: складываем вес в одну запись модели.
+    final eda = <String, MapEntry<Genome, double>>{};
+    void feedEda(Genome genome, double weight) {
+      final previous = eda[genome.key];
+      eda[genome.key] = MapEntry(
+        previous?.key ?? genome,
+        (previous?.value ?? 0) + weight,
+      );
+    }
+
+    for (var i = 0; i < elites.length; i++) {
+      feedEda(elites[i], 1.0 / (1.0 + i));
+    }
+    for (final genome in hofGenomes) {
+      feedEda(genome, 0.25);
+    }
     final model = AlleleModel.fit(
-      [...elites, ...hofGenomes],
+      [for (final e in eda.values) e.key],
       pools,
-      // Вес по рангу: лучшая особь формирует распределение сильнее;
-      // архив проверенных особей — чуть слабее.
-      weighting: [
-        for (var i = 0; i < elites.length; i++) 1.0 / (1.0 + i),
-        ...List<double>.filled(hofGenomes.length, 0.25),
-      ],
+      weighting: [for (final e in eda.values) e.value],
       countries: settings.countries,
     );
     final div = diversity(elites);

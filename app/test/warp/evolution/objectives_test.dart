@@ -103,6 +103,12 @@ void main() {
       expect(f.copy().requestsUsed, 5);
     });
 
+    test('синтетический отказ без пробы не тратит бюджет запросов', () {
+      final f = of([Observation.failed('budget exhausted', requests: 0)]);
+      expect(f.attempts, 1);
+      expect(f.requestsUsed, 0);
+    });
+
     test('errorSignatures сворачивает адреса и тайминги в одну корзину', () {
       final f = of([
         Observation.failed('dial tcp 162.159.192.1:443: i/o timeout after 8000 ms'),
