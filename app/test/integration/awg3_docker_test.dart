@@ -112,6 +112,12 @@ void main() {
       }
 
       final secrets = _standSecrets(client, server);
+      final serverSource = server.readAsStringSync();
+      expect(serverSource, startsWith('[Interface]\n'));
+      expect(
+        RegExp(r'^\[Interface\]$', multiLine: true).allMatches(serverSource),
+        hasLength(1),
+      );
       final log = _StandLog(secrets);
       Process? singbox;
       var singboxStreams = <Future<void>>[];

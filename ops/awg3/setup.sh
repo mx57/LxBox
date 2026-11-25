@@ -64,7 +64,7 @@ interface=$(printf '%s\n' "$client" | awk '
 server=$(printf '%s\n' "$interface"
   printf '[Peer]\nPublicKey = %s\nPreSharedKey = %s\nAllowedIPs = 10.8.3.2/32\n' \
     "$client_public" "$pre_shared")
-server=$(printf 'PrivateKey = %s\nAddress = 10.8.3.1/24\nListenPort = 51820\n%s\n' \
+server=$(printf '[Interface]\nPrivateKey = %s\nAddress = 10.8.3.1/24\nListenPort = 51820\n%s\n' \
   "$server_private" "$server")
 
 client_tmp=$(mktemp "$RUNTIME/.client.conf.XXXXXX")
