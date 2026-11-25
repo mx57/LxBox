@@ -41,6 +41,7 @@ class NodeViewItem {
     this.tailnetNote,
     this.openConnectKind = OpenConnectRowKind.none,
     this.openConnectText = '',
+    this.infoLine,
   });
 
   /// Tag ноды или group selector (например `vpn-1`, `✨auto`).
@@ -148,4 +149,7 @@ class NodeViewItem {
   /// ошибка ядра ([openConnectText]). На месте подписи состояния endpoint'а.
   final OpenConnectRowKind openConnectKind;
   final String openConnectText;
+
+  /// Дополнительная строка под подзаголовком; `null` — обычная высота строки.
+  final String? infoLine;
 }

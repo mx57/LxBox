@@ -40,6 +40,7 @@ import '../services/wireguard/wg_ini_export.dart';
 import '../widgets/masquerade_fields.dart';
 import '../widgets/tls_policy_tiles.dart';
 import '../widgets/auto_group_form.dart';
+import '../widgets/awg_fields.dart';
 import 'node_settings/auto_group_source.dart';
 import 'node_settings/node_document.dart';
 import 'subscriptions_screen/entry_warnings.dart';
@@ -606,6 +607,35 @@ class _NodeSettingsScreenState extends State<NodeSettingsScreen>
     if (mounted && _containerRaw == before) _sourceCtrl.text = before;
   }
 
+  Future<void> _saveAwgFields(Map<String, Object?> fields) async {
+    final before = _containerRaw;
+    _sourceCtrl.text = withAwgFields(before, fields, dialect: _dialect);
+    await _saveSource();
+    if (mounted && _containerRaw == before) _sourceCtrl.text = before;
+  }
+
+  Widget _buildAwgFieldsSection(WireguardSpec node) {
+    final raw = _containerRaw;
+    final reason = switch (masqueradeWritability(raw, dialect: _dialect)) {
+      MasqueradeWritability.writable => null,
+      MasqueradeWritability.packedLink => getLocalText.s(
+          "This source is a packed link. AmneziaWG fields can be changed after Edit JSON turns the node into JSON."),
+      MasqueradeWritability.unsupportedFormat => getLocalText.s(
+          "AmneziaWG fields are not supported for this source format."),
+    };
+    return ListenableBuilder(
+      listenable: _sourceCtrl,
+      builder: (context, _) => AwgFieldsSection(
+        key: ValueKey(raw),
+        fields: node.awg!.fields,
+        unavailableReason: reason,
+        sourceDirty: _sourceCtrl.text != raw,
+        sourceHasMasqueradeKeys: masqueradeKeysPresent(raw, dialect: _dialect),
+        onSave: _saveAwgFields,
+      ),
+    );
+  }
+
   /// §623 — секция Masquerade узла WireGuard/AmneziaWG. Явный `i1`
   /// приоритетнее: тогда секция недоступна; так же — у упакованной ссылки и
   /// у источника, в который писать не умеем.
@@ -1027,6 +1057,16 @@ class _NodeSettingsScreenState extends State<NodeSettingsScreen>
                 "AmneziaWG 1.5 parameters: decoy packets before the WireGuard handshake."),
               theme),
           _buildMasqueradeSection(wg),
+          if (wg.awg != null) ...[
+            const SizedBox(height: 16),
+            _sectionHeader(
+              getLocalText.s("AmneziaWG parameters"),
+              getLocalText.s(
+                "Server-matched junk, magic headers and AmneziaWG 3.x fields."),
+              theme,
+            ),
+            _buildAwgFieldsSection(wg),
+          ],
         ],
         // §322 — у узла автовыбора detour'а нет: он не соединение, а правило
         // выбора среди членов. Блок не рисуем вовсе (не «серым»).

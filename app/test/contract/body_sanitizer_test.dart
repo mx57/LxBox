@@ -9,7 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../contract_paths.dart';
 import 'package:lxbox/models/node_warning.dart';
 import 'package:lxbox/services/contract/body_sanitizer.dart';
-
+import 'package:lxbox/services/contract/registry.dart';
 
 /// Пин ядра, на котором сверена схема (`body.core` реестра): под ним
 /// проходят все поля, кроме явно более новых.
@@ -1090,6 +1090,63 @@ void main() {
 
     SanitizeResult sanWg([Map<String, dynamic> extra = const {}]) =>
         _san(wgBody(extra), scheme: 'wireguard', core: '1.14.0-lx.40');
+
+    test('ib=chrome-full survives trim_lower with an info advisory', () {
+      final r = sanWg({
+        'ip': 'quic',
+        'id': 'a.example',
+        'ib': ' Chrome-Full ',
+      });
+      expect(r.body, isNotNull);
+      expect(r.body!['ib'], 'chrome-full');
+      final advisory = _byCode(r, 'ib_chrome_full_experimental');
+      expect(advisory.path, 'ib');
+      expect(advisory.value, 'chrome-full');
+      expect(
+        r.warnings
+            .where((w) => w.code == 'ib_chrome_full_experimental'),
+        hasLength(1),
+      );
+      expect(_codes(r), isNot(contains('awg3_field_invalid')));
+      expect(
+        ContractRegistry.I.textFor('ib_chrome_full_experimental')?.severity,
+        'info',
+      );
+    });
+
+    test('ordinary ib profiles stay valid without the experimental advisory',
+        () {
+      for (final ib in const ['chrome', 'firefox', 'curl']) {
+        final r = sanWg({
+          'ip': 'quic',
+          'id': 'a.example',
+          'ib': ib,
+        });
+        expect(r.body, isNotNull, reason: ib);
+        expect(r.body!['ib'], ib, reason: ib);
+        expect(_codes(r), isNot(contains('awg3_field_invalid')), reason: ib);
+        expect(
+          _codes(r),
+          isNot(contains('ib_chrome_full_experimental')),
+          reason: ib,
+        );
+      }
+    });
+
+    test('invalid ib is removed with awg3_field_invalid, without an advisory',
+        () {
+      final r = sanWg({
+        'ip': 'quic',
+        'id': 'a.example',
+        'ib': 'opera',
+      });
+      expect(r.body, isNotNull);
+      expect(r.body!.containsKey('ib'), isFalse);
+      final invalid = _byCode(r, 'awg3_field_invalid');
+      expect(invalid.path, 'ib');
+      expect(invalid.value, 'opera');
+      expect(_codes(r), isNot(contains('ib_chrome_full_experimental')));
+    });
 
     test('normalize range_order: перевёрнутая пара свопается ТИХО', () {
       final r = sanWg({'h1': '40-10'});

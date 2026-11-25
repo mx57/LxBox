@@ -53,6 +53,7 @@ The `contract/registry/warnings.json` dictionary is shared with LxBox: both apps
 - [`grpc_multi_mode_ignored`](#grpc_multi_mode_ignored) · `warning` — gRPC: multi mode not applied
 - [`hysteria2_server_ports_item_invalid`](#hysteria2_server_ports_item_invalid) · `warning` — Hysteria2: port hopping range dropped
 - [`hysteria_server_ports_item_invalid`](#hysteria_server_ports_item_invalid) · `warning` — Hysteria: port hopping range dropped
+- [`ib_chrome_full_experimental`](#ib_chrome_full_experimental) · `info` — AmneziaWG 3.x: experimental full Chrome profile
 - [`json_field_unknown`](#json_field_unknown) · `info` — Configuration: field {query_name} not read
 - [`masque_tls_field_ignored`](#masque_tls_field_ignored) · `info` — MASQUE: TLS field {path} not used
 - [`masque_tls_fragment_h3`](#masque_tls_fragment_h3) · `info` — MASQUE over h3: {path} removed
@@ -990,6 +991,24 @@ The `contract/registry/warnings.json` dictionary is shared with LxBox: both apps
 **Where it comes from:**
 
 - Node or subscription level: no field in the registry points at this code, so it is raised while the entry as a whole is being read.
+
+<a id="ib_chrome_full_experimental"></a>
+### ib_chrome_full_experimental
+
+**severity:** `info` · **params:** `path`, `value`
+
+**AmneziaWG 3.x: experimental full Chrome profile**
+
+- **What happened:** The AmneziaWG 3.x field {path} is {value}, an experimental full Chrome masquerade profile. The value was kept unchanged, but it may fail on LTE or other mobile networks. Use it only when the server is configured for the same profile.
+- **Why it happens:** The full Chrome signature is an experimental option rather than a stable default. Its client fingerprint may not be carried reliably by some mobile-network paths.
+- **What you can do:**
+  - Nothing is required for import: the configured value is preserved.
+  - If the node fails on LTE or another mobile network, choose the regular chrome profile and use a server configured for it.
+
+**Where it comes from:**
+
+- [`wireguard`](protocols/wireguard.md)
+  - [`ib`](protocols/wireguard.md#body-ib) — the value is `chrome-full` → kept with a notice
 
 <a id="json_field_unknown"></a>
 ### json_field_unknown

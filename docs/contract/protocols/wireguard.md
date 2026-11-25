@@ -380,9 +380,10 @@ The node body itself — the sing-box JSON kept in the launcher state. The path 
   - Only written when: core ≥ `1.13.13-lx.1`, lx fork only, build tag `with_awg`
   - Means protocol level `awg1.5`, adds `+` to the level label
 - <a id="body-ib"></a>**`ib`** — Client profile imitated inside the masquerade.
-  - Type: enum, `""`, `chrome`, `firefox`, `curl`, normalized: `trim_lower`
+  - Type: enum, `""`, `chrome`, `firefox`, `curl`, `chrome-full`, normalized: `trim_lower`
   - Set by link parameter: [`ib`](#link-proto-ib)
   - If invalid: removed → [`awg3_field_invalid`](../warnings.md#awg3_field_invalid)
+  - Accepted with a notice for `chrome-full` → [`ib_chrome_full_experimental`](../warnings.md#ib_chrome_full_experimental)
   - Meaningless without: `ip`
   - Only written when: core ≥ `1.13.13-lx.1`, lx fork only, build tag `with_awg`
   - Means protocol level `awg1.5`, adds `+` to the level label
@@ -539,6 +540,8 @@ Every code that can be raised on a node of this scheme, including the ones comin
   - [`id`](#body-id) — set without `ip` → removed
   - [`ip`](#body-ip) — set without `id` when `ip` is `quic` → removed
   - [`ib`](#body-ib) — set without `ip` → removed
+- [`ib_chrome_full_experimental`](../warnings.md#ib_chrome_full_experimental)
+  - [`ib`](#body-ib) — the value is `chrome-full` → kept with a notice
 - [`port_invalid`](../warnings.md#port_invalid)
   - [`peers.port`](#body-peers-port) — the value does not fit the field → node dropped
 - [`type_invalid`](../warnings.md#type_invalid)
@@ -652,6 +655,7 @@ Every code that can be raised on a node of this scheme, including the ones comin
 
 **Kept as is, with a notice**
 
+- `ib` — accepted, but worth knowing about
 - `mtu` — a value above `1280` coming from `singbox` is kept, with a note
 
 **Left out when the running core is too old**

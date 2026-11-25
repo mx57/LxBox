@@ -12,6 +12,7 @@ library;
 import 'dart:convert';
 
 import '../../models/codec/source_record.dart';
+import '../../models/node_spec.dart' show Awg;
 import '../../models/source_dialect.dart';
 import '../parser/source_classify.dart';
 import '../contract/registry.dart';
@@ -132,8 +133,10 @@ const _kKeys = ['ip', 'id', 'ib'];
 final _kPackedBody = RegExp(r'^[A-Za-z0-9+/=_-]+\s*$');
 
 /// Можно ли писать маскировку в источник [raw].
-MasqueradeWritability masqueradeWritability(String raw,
-    {SourceDialect? dialect}) {
+MasqueradeWritability masqueradeWritability(
+  String raw, {
+  SourceDialect? dialect,
+}) {
   final t = raw.trim();
   if (t.isEmpty) return MasqueradeWritability.unsupportedFormat;
   switch (dialect ?? sourceDialectOf(t)) {
@@ -196,7 +199,7 @@ bool masqueradeKeysPresent(String raw, {SourceDialect? dialect}) {
       return false;
     default:
       final q = _splitLink(t).query;
-      return q != null && q.split('&').any((p) => _masqueradeKeyOf(p) != null);
+      return q != null && q.split('&').any((p) => _keyOf(p, _kKeys) != null);
   }
 }
 
@@ -204,7 +207,34 @@ bool masqueradeKeysPresent(String raw, {SourceDialect? dialect}) {
 /// байты источника не трогаются (у JSON — переформатирование с отступом 2,
 /// как у Save Source). Источник, в который писать нельзя
 /// ([masqueradeWritability]), — [raw] без изменений.
-String withMasquerade(String raw, Masquerade m, {SourceDialect? dialect}) {
+String withMasquerade(String raw, Masquerade m, {SourceDialect? dialect}) =>
+    _withFields(raw, {'ip': m.ip, 'id': m.id, 'ib': m.ib}, dialect: dialect);
+
+/// Текст источника [raw] с полями [fields] AmneziaWG. `null` и выключенные
+/// булевы AWG3 убирают ключ; прочие байты источника и его вид сохраняются.
+/// Неизвестные имена полей игнорируются.
+String withAwgFields(
+  String raw,
+  Map<String, Object?> fields, {
+  SourceDialect? dialect,
+}) {
+  const known = {...Awg.numKeys, ...Awg.strKeys, ...Awg.awg3JsonKeys};
+  return _withFields(raw, {
+    for (final e in fields.entries)
+      if (known.contains(e.key))
+        e.key: e.value == ''
+            ? null
+            : (Awg.awg3BoolKeys.contains(e.key) && e.value == false)
+            ? null
+            : e.value,
+  }, dialect: dialect);
+}
+
+String _withFields(
+  String raw,
+  Map<String, Object?> fields, {
+  SourceDialect? dialect,
+}) {
   final kind = dialect ?? sourceDialectOf(raw);
   if (masqueradeWritability(raw, dialect: kind) !=
       MasqueradeWritability.writable) {
@@ -212,11 +242,9 @@ String withMasquerade(String raw, Masquerade m, {SourceDialect? dialect}) {
   }
   final t = raw.trim();
   return switch (kind) {
-    SourceDialect.singbox ||
-    SourceDialect.xray =>
-      withBodyFields(t, {'ip': m.ip, 'id': m.id, 'ib': m.ib}),
-    SourceDialect.wgIni => _withIni(raw, m),
-    SourceDialect.uri => _withLink(t, m),
+    SourceDialect.singbox || SourceDialect.xray => withBodyFields(t, fields),
+    SourceDialect.wgIni => _withIni(raw, fields),
+    SourceDialect.uri => _withLink(t, fields),
   };
 }
 
@@ -260,10 +288,6 @@ const _kIdPatternFallback =
 
 // --- INI ---
 
-/// Канонические имена ключей в INI (ридер регистронезависим:
-/// `ini_dialect.key_case: lower`).
-const _kIniNames = {'ip': 'Ip', 'id': 'Id', 'ib': 'Ib'};
-
 /// `[Interface]`: (индекс заголовка, индекс конца секции — следующий
 /// заголовок или длина). `null` — секции нет.
 (int, int)? _interfaceRange(List<String> lines) {
@@ -282,21 +306,26 @@ bool _isComment(String line) {
   return s.startsWith('#') || s.startsWith(';');
 }
 
-bool _isMasqueradeKeyLine(String line) {
+bool _isMasqueradeKeyLine(String line) => _isKeyLine(line, _kKeys);
+
+bool _isKeyLine(String line, Iterable<String> keys) {
   if (_isComment(line)) return false;
   final eq = line.indexOf('=');
   if (eq < 0) return false;
-  return _kKeys.contains(line.substring(0, eq).trim().toLowerCase());
+  return keys.contains(line.substring(0, eq).trim().toLowerCase());
 }
 
-String _withIni(String raw, Masquerade m) {
+String _withIni(String raw, Map<String, Object?> fields) {
   final crlf = raw.contains('\r\n');
   final lines = raw.split('\n');
   final r = _interfaceRange(lines);
   if (r == null) return raw;
+  final sourceKeys = {for (final k in fields.keys) _iniName(k).toLowerCase()};
   final out = <String>[];
   for (var i = 0; i < lines.length; i++) {
-    if (i > r.$1 && i < r.$2 && _isMasqueradeKeyLine(lines[i])) continue;
+    if (i > r.$1 && i < r.$2 && _isKeyLine(lines[i], sourceKeys)) {
+      continue;
+    }
     out.add(lines[i]);
   }
   final end = r.$2 - (lines.length - out.length);
@@ -308,8 +337,9 @@ String _withIni(String raw, Masquerade m) {
   }
   final eol = crlf ? '\r' : '';
   final add = [
-    for (final k in _kKeys)
-      if (_value(m, k) case final v?) '${_kIniNames[k]} = $v$eol',
+    for (final e in fields.entries)
+      if (_fieldText(e.key, e.value) case final v?)
+        '${_iniName(e.key)} = $v$eol',
   ];
   // Последняя строка файла без перевода строки: новые строки встают за ней,
   // у неё самой `\r` не было.
@@ -324,11 +354,22 @@ String _withIni(String raw, Masquerade m) {
   return out.join('\n');
 }
 
-String? _value(Masquerade m, String k) => switch (k) {
-  'ip' => m.ip,
-  'id' => m.id,
-  _ => m.ib,
-};
+String _iniName(String key) => key
+    .split('_')
+    .map(
+      (part) =>
+          part.isEmpty ? part : '${part[0].toUpperCase()}${part.substring(1)}',
+    )
+    .join();
+
+String? _fieldText(String key, Object? value) {
+  if (value == null) return null;
+  if (Awg.awg3BoolKeys.contains(key)) {
+    if (value == true) return 'on';
+    if (value == false) return null;
+  }
+  return '$value';
+}
 
 // --- ссылка ---
 
@@ -347,34 +388,45 @@ String? _value(Masquerade m, String k) => switch (k) {
         );
 }
 
-/// Имя ключа маскировки пары `k=v` в нижнем регистре или `null`.
-String? _masqueradeKeyOf(String pair) {
+/// Имя ключа пары `k=v` в нижнем регистре или `null`.
+String? _keyOf(String pair, Iterable<String> keys) {
   final eq = pair.indexOf('=');
   final k = (eq < 0 ? pair : pair.substring(0, eq)).toLowerCase();
-  return _kKeys.contains(k) ? k : null;
+  return keys.contains(k) ? k : null;
 }
 
 /// Правка query на уровне строки: `Uri.queryParameters` и пересборка `Uri`
 /// перекодируют прочие параметры и съедают сырой `+` (§421).
-String _withLink(String t, Masquerade m) {
+String _withLink(String t, Map<String, Object?> fields) {
   final parts = _splitLink(t);
   final pairs = parts.query == null || parts.query!.isEmpty
       ? <String>[]
       : parts.query!.split('&');
+  final names = {
+    for (final k in fields.keys)
+      k: Awg.awg3JsonKeys.contains(k) ? Awg.awg3Param(k) : k,
+  };
+  final sourceKeys = names.values.toSet();
   final written = <String>{};
   final out = <String>[];
   for (final p in pairs) {
-    final k = _masqueradeKeyOf(p);
+    final k = _keyOf(p, sourceKeys);
     if (k == null) {
       out.add(p);
       continue;
     }
-    final v = _value(m, k);
+    final jsonKey = Awg.awg3ParamToJson[k] ?? k;
+    if (!fields.containsKey(jsonKey)) {
+      out.add(p);
+      continue;
+    }
+    final v = _fieldText(jsonKey, fields[jsonKey]);
     if (v == null || !written.add(k)) continue; // убрать / повтор
     out.add('$k=${Uri.encodeQueryComponent(v)}');
   }
-  for (final k in _kKeys) {
-    final v = _value(m, k);
+  for (final e in fields.entries) {
+    final k = names[e.key]!;
+    final v = _fieldText(e.key, e.value);
     if (v != null && written.add(k)) {
       out.add('$k=${Uri.encodeQueryComponent(v)}');
     }

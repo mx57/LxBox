@@ -7198,5 +7198,167 @@
   },
   "WARP seed filtering is unavailable — private WireGuard/AmneziaWG configs may be included": {
     "value": "WARP 种子筛选不可用——私有 WireGuard/AmneziaWG 配置可能会被纳入"
+  },
+  "AmneziaWG 3.0": {
+    "value": "AmneziaWG 3.0"
+  },
+  "AmneziaWG 3.1": {
+    "value": "AmneziaWG 3.1"
+  },
+  "AmneziaWG 3.x settings must match the server. A mismatch can start the tunnel but carry no data.": {
+    "value": "AmneziaWG 3.x 参数必须与服务器一致。不匹配时隧道可能建立，但不传输数据。"
+  },
+  "AmneziaWG fields are not supported for this source format.": {
+    "value": "此来源格式不支持 AmneziaWG 字段。"
+  },
+  "AmneziaWG parameters": {
+    "value": "AmneziaWG 参数"
+  },
+  "Attempts: number or N-M range.": {
+    "value": "尝试次数：数字或 N-M 范围。"
+  },
+  "Bytes: number or N-M range.": {
+    "value": "字节数：数字或 N-M 范围。"
+  },
+  "Chrome Full (experimental)": {
+    "value": "Chrome Full（实验性）"
+  },
+  "Content padding addition": {
+    "value": "内容附加填充"
+  },
+  "Cookie magic header (H3)": {
+    "value": "Cookie 魔术标头（H3）"
+  },
+  "Cookie padding (S3)": {
+    "value": "Cookie 填充（S3）"
+  },
+  "Custom packet I1": {
+    "value": "自定义数据包 I1"
+  },
+  "Custom packet I2": {
+    "value": "自定义数据包 I2"
+  },
+  "Custom packet I3": {
+    "value": "自定义数据包 I3"
+  },
+  "Custom packet I4": {
+    "value": "自定义数据包 I4"
+  },
+  "Custom packet I5": {
+    "value": "自定义数据包 I5"
+  },
+  "Custom packets (I1-I5)": {
+    "value": "自定义数据包（I1-I5）"
+  },
+  "Disable cookies": {
+    "value": "禁用 Cookie"
+  },
+  "Enter a whole number from 0 to 4294967295.": {
+    "value": "请输入 0 到 4294967295 之间的整数。"
+  },
+  "Enter a whole number or an N-M header range.": {
+    "value": "请输入整数或 N-M 标头范围。"
+  },
+  "Enter a whole number or an N-M range with N no greater than M.": {
+    "value": "请输入整数或 N-M 范围，且 N 不得大于 M。"
+  },
+  "Experimental: the full Chrome signature may fail on LTE networks.": {
+    "value": "实验性功能：完整 Chrome 特征可能在 LTE 网络中失效。"
+  },
+  "Generate a header protection key": {
+    "value": "生成标头保护密钥"
+  },
+  "Header protection key": {
+    "value": "标头保护密钥"
+  },
+  "I1 conflicts with Masquerade. Clear the Masquerade protocol first.": {
+    "value": "I1 与 Masquerade 冲突。请先清除 Masquerade 协议。"
+  },
+  "I2 conflicts with the SIP masquerade protocol.": {
+    "value": "I2 与 SIP 伪装协议冲突。"
+  },
+  "Initiation magic header (H1)": {
+    "value": "发起魔术标头（H1）"
+  },
+  "Initiation padding (S1)": {
+    "value": "发起填充（S1）"
+  },
+  "Jmin must not exceed Jmax.": {
+    "value": "Jmin 不得大于 Jmax。"
+  },
+  "Jmin requires Jmax.": {
+    "value": "使用 Jmin 时必须设置 Jmax。"
+  },
+  "Junk and magic headers": {
+    "value": "垃圾包与魔术标头"
+  },
+  "Junk packet count (Jc)": {
+    "value": "垃圾包数量（Jc）"
+  },
+  "Keepalive timeout": {
+    "value": "Keepalive 超时"
+  },
+  "Magic header ranges H1-H4 must not overlap.": {
+    "value": "魔术标头范围 H1-H4 不得重叠。"
+  },
+  "Maximum handshake attempts": {
+    "value": "最大握手尝试次数"
+  },
+  "Maximum junk packet size (Jmax)": {
+    "value": "垃圾包最大大小（Jmax）"
+  },
+  "Minimum junk packet size (Jmin)": {
+    "value": "垃圾包最小大小（Jmin）"
+  },
+  "Number or N-M range.": {
+    "value": "数字或 N-M 范围。"
+  },
+  "Random trailers": {
+    "value": "随机尾部数据"
+  },
+  "Reject after time": {
+    "value": "拒绝等待时间"
+  },
+  "Rekey after time": {
+    "value": "密钥更新间隔"
+  },
+  "Rekey timeout": {
+    "value": "密钥更新超时"
+  },
+  "Response magic header (H2)": {
+    "value": "响应魔术标头（H2）"
+  },
+  "Response padding (S2)": {
+    "value": "响应填充（S2）"
+  },
+  "Seconds: number or N-M range.": {
+    "value": "秒数：数字或 N-M 范围。"
+  },
+  "Server-matched junk, magic headers and AmneziaWG 3.x fields.": {
+    "value": "与服务器匹配的垃圾包、魔术标头和 AmneziaWG 3.x 字段。"
+  },
+  "Standard base64, 32 bytes. The generated key must also be set on the server.": {
+    "value": "标准 Base64，32 字节。生成的密钥还必须设置在服务器上。"
+  },
+  "The key must be standard base64 of exactly 32 bytes, not all zero.": {
+    "value": "密钥必须是恰好 32 字节的标准 Base64，且不能全为零。"
+  },
+  "These values must match the server. A mismatch can start the tunnel but prevent data transfer.": {
+    "value": "这些值必须与服务器一致。不匹配时隧道可能建立，但不传输数据。"
+  },
+  "This source is a packed link. AmneziaWG fields can be changed after Edit JSON turns the node into JSON.": {
+    "value": "这是打包链接。通过“编辑 JSON”将节点转换为 JSON 后，才能修改 AmneziaWG 字段。"
+  },
+  "Transport magic header (H4)": {
+    "value": "传输魔术标头（H4）"
+  },
+  "Transport padding (S4)": {
+    "value": "传输填充（S4）"
+  },
+  "Whole number, 0-4294967295.": {
+    "value": "整数，0-4294967295。"
+  },
+  "With a header protection key, S1-S4 must each be at least 12.": {
+    "value": "设置标头保护密钥后，S1-S4 均必须至少为 12。"
   }
 }

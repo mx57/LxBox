@@ -680,6 +680,10 @@ class HomeNodeList extends StatelessWidget {
           ),
           openConnectKind: ocRow.kind,
           openConnectText: ocRow.text,
+          infoLine: cache[tag]?.isAwg3 == true
+              ? getLocalText.s(
+                  "AmneziaWG 3.x settings must match the server. A mismatch can start the tunnel but carry no data.")
+              : null,
           matches: matchingSet.contains(tag),
           // §355 — мёртвая нода с зависимыми (DNS/ноды через detour):
           // ⚠-метка, тап по ней — sheet со списком пострадавших.

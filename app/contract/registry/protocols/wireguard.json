@@ -2624,7 +2624,8 @@
           "",
           "chrome",
           "firefox",
-          "curl"
+          "curl",
+          "chrome-full"
         ],
         "normalize": "trim_lower",
         "on_invalid": {
@@ -2632,6 +2633,14 @@
           "code": "awg3_field_invalid",
           "core_rejects": true
         },
+        "advisory": [
+          {
+            "values": [
+              "chrome-full"
+            ],
+            "code": "ib_chrome_full_experimental"
+          }
+        ],
         "lx_only": true,
         "min_core": "1.13.13-lx.1",
         "build_tag": "with_awg",

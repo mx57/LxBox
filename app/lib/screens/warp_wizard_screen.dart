@@ -16,6 +16,7 @@ import 'endpoint_scan_screen.dart';
 import 'folder_detail_screen.dart';
 import 'warp_experiment_screen.dart';
 import '../services/l10n/locale_controller.dart';
+import '../widgets/masquerade_fields.dart';
 import '../widgets/safe_bottom.dart';
 
 /// §025 — Full-screen визард «Get WARP». Открывается из overflow-меню
@@ -1182,30 +1183,27 @@ class _WarpWizardScreenState extends State<WarpWizardScreen> with SnackHelper {
                                     child: DropdownButtonFormField<String>(
                                       initialValue: _masqIb,
                                       isDense: true,
-                                      decoration: const InputDecoration(
+                                      decoration: InputDecoration(
                                         isDense: true,
-                                        border: OutlineInputBorder(),
-                                        contentPadding: EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 8,
+                                        border: const OutlineInputBorder(),
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 8,
+                                            ),
+                                        helperText: masqueradeBrowserHint(
+                                          _masqIb,
                                         ),
+                                        helperMaxLines: 3,
                                       ),
-                                      items: const [
-                                        DropdownMenuItem(
-                                          value: 'chrome',
-                                          // l10n-exempt: brand name
-                                          child: Text('Chrome'),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'firefox',
-                                          // l10n-exempt: brand name
-                                          child: Text('Firefox'),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'curl',
-                                          // l10n-exempt: brand name
-                                          child: Text('cURL'),
-                                        ),
+                                      items: [
+                                        for (final v in kMasqueradeBrowsers)
+                                          DropdownMenuItem(
+                                            value: v,
+                                            child: Text(
+                                              masqueradeBrowserName(v),
+                                            ),
+                                          ),
                                       ],
                                       onChanged: _busy
                                           ? null

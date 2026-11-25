@@ -600,7 +600,7 @@ class NodeRow extends StatelessWidget {
         onTap: onHighlight,
         onLongPress: () => unawaited(_openLongPressMenu(context)),
         child: SizedBox(
-          height: 56,
+          height: item.infoLine == null ? 56 : 72,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -661,6 +661,21 @@ class NodeRow extends StatelessWidget {
                       );
                     }),
                     _buildSubtitleRow(context, colorScheme),
+                    if (item.infoLine != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          item.infoLine!,
+                          key: const ValueKey('node-info-line'),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                fontSize: 10,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ),
                   ],
                 ),
               ),

@@ -7489,5 +7489,167 @@
   },
   "WARP seed filtering is unavailable — private WireGuard/AmneziaWG configs may be included": {
     "value": "Фильтр семян WARP недоступен — в посев могут попасть приватные конфиги WireGuard/AmneziaWG"
+  },
+  "AmneziaWG 3.0": {
+    "value": "AmneziaWG 3.0"
+  },
+  "AmneziaWG 3.1": {
+    "value": "AmneziaWG 3.1"
+  },
+  "AmneziaWG 3.x settings must match the server. A mismatch can start the tunnel but carry no data.": {
+    "value": "Параметры AmneziaWG 3.x должны совпадать с сервером. При несовпадении туннель может запуститься, но не передавать данные."
+  },
+  "AmneziaWG fields are not supported for this source format.": {
+    "value": "Поля AmneziaWG не поддерживаются для этого формата источника."
+  },
+  "AmneziaWG parameters": {
+    "value": "Параметры AmneziaWG"
+  },
+  "Attempts: number or N-M range.": {
+    "value": "Попытки: число или диапазон N-M."
+  },
+  "Bytes: number or N-M range.": {
+    "value": "Байты: число или диапазон N-M."
+  },
+  "Chrome Full (experimental)": {
+    "value": "Chrome Full (экспериментальный)"
+  },
+  "Content padding addition": {
+    "value": "Дополнительный padding содержимого"
+  },
+  "Cookie magic header (H3)": {
+    "value": "Magic-заголовок cookie (H3)"
+  },
+  "Cookie padding (S3)": {
+    "value": "Padding cookie (S3)"
+  },
+  "Custom packet I1": {
+    "value": "Пользовательский пакет I1"
+  },
+  "Custom packet I2": {
+    "value": "Пользовательский пакет I2"
+  },
+  "Custom packet I3": {
+    "value": "Пользовательский пакет I3"
+  },
+  "Custom packet I4": {
+    "value": "Пользовательский пакет I4"
+  },
+  "Custom packet I5": {
+    "value": "Пользовательский пакет I5"
+  },
+  "Custom packets (I1-I5)": {
+    "value": "Пользовательские пакеты (I1-I5)"
+  },
+  "Disable cookies": {
+    "value": "Отключить cookies"
+  },
+  "Enter a whole number from 0 to 4294967295.": {
+    "value": "Введите целое число от 0 до 4294967295."
+  },
+  "Enter a whole number or an N-M header range.": {
+    "value": "Введите целое число или диапазон заголовков N-M."
+  },
+  "Enter a whole number or an N-M range with N no greater than M.": {
+    "value": "Введите целое число или диапазон N-M, где N не больше M."
+  },
+  "Experimental: the full Chrome signature may fail on LTE networks.": {
+    "value": "Экспериментально: полная сигнатура Chrome может не работать в сетях LTE."
+  },
+  "Generate a header protection key": {
+    "value": "Сгенерировать ключ защиты заголовка"
+  },
+  "Header protection key": {
+    "value": "Ключ защиты заголовка"
+  },
+  "I1 conflicts with Masquerade. Clear the Masquerade protocol first.": {
+    "value": "I1 конфликтует с Masquerade. Сначала очистите протокол Masquerade."
+  },
+  "I2 conflicts with the SIP masquerade protocol.": {
+    "value": "I2 конфликтует с протоколом маскировки SIP."
+  },
+  "Initiation magic header (H1)": {
+    "value": "Magic-заголовок инициации (H1)"
+  },
+  "Initiation padding (S1)": {
+    "value": "Padding инициации (S1)"
+  },
+  "Jmin must not exceed Jmax.": {
+    "value": "Jmin не должен превышать Jmax."
+  },
+  "Jmin requires Jmax.": {
+    "value": "Jmin требует Jmax."
+  },
+  "Junk and magic headers": {
+    "value": "Junk-пакеты и magic-заголовки"
+  },
+  "Junk packet count (Jc)": {
+    "value": "Количество junk-пакетов (Jc)"
+  },
+  "Keepalive timeout": {
+    "value": "Тайм-аут keepalive"
+  },
+  "Magic header ranges H1-H4 must not overlap.": {
+    "value": "Диапазоны magic-заголовков H1-H4 не должны перекрываться."
+  },
+  "Maximum handshake attempts": {
+    "value": "Максимум попыток рукопожатия"
+  },
+  "Maximum junk packet size (Jmax)": {
+    "value": "Максимальный размер junk-пакета (Jmax)"
+  },
+  "Minimum junk packet size (Jmin)": {
+    "value": "Минимальный размер junk-пакета (Jmin)"
+  },
+  "Number or N-M range.": {
+    "value": "Число или диапазон N-M."
+  },
+  "Random trailers": {
+    "value": "Случайные trailers"
+  },
+  "Reject after time": {
+    "value": "Отклонять через"
+  },
+  "Rekey after time": {
+    "value": "Переключение ключа через"
+  },
+  "Rekey timeout": {
+    "value": "Тайм-аут переключения ключа"
+  },
+  "Response magic header (H2)": {
+    "value": "Magic-заголовок ответа (H2)"
+  },
+  "Response padding (S2)": {
+    "value": "Padding ответа (S2)"
+  },
+  "Seconds: number or N-M range.": {
+    "value": "Секунды: число или диапазон N-M."
+  },
+  "Server-matched junk, magic headers and AmneziaWG 3.x fields.": {
+    "value": "Junk-пакеты, magic-заголовки и поля AmneziaWG 3.x, совпадающие с сервером."
+  },
+  "Standard base64, 32 bytes. The generated key must also be set on the server.": {
+    "value": "Стандартный base64, 32 байта. Сгенерированный ключ нужно также задать на сервере."
+  },
+  "The key must be standard base64 of exactly 32 bytes, not all zero.": {
+    "value": "Ключ должен быть стандартным base64 ровно из 32 байт и не состоять только из нулей."
+  },
+  "These values must match the server. A mismatch can start the tunnel but prevent data transfer.": {
+    "value": "Эти значения должны совпадать с сервером. При несовпадении туннель может запуститься, но не передавать данные."
+  },
+  "This source is a packed link. AmneziaWG fields can be changed after Edit JSON turns the node into JSON.": {
+    "value": "Это упакованная ссылка. Поля AmneziaWG можно изменить после превращения узла в JSON через «Редактировать JSON»."
+  },
+  "Transport magic header (H4)": {
+    "value": "Magic-заголовок транспорта (H4)"
+  },
+  "Transport padding (S4)": {
+    "value": "Padding транспорта (S4)"
+  },
+  "Whole number, 0-4294967295.": {
+    "value": "Целое число, 0-4294967295."
+  },
+  "With a header protection key, S1-S4 must each be at least 12.": {
+    "value": "С ключом защиты заголовка каждый из S1-S4 должен быть не меньше 12."
   }
 }

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lxbox/controllers/subscription_controller.dart';
+import 'package:lxbox/models/node_spec.dart';
 import 'package:lxbox/models/server_list.dart';
 import 'package:lxbox/models/source_dialect.dart';
 import 'package:lxbox/screens/node_settings_screen.dart';
@@ -140,5 +141,64 @@ void main() {
     expect(rawOf(c), contains('Ip = quic'));
     expect(c.entries.single.list.nodes.single.tag, tag);
     expect(tabIndex(tester), 1);
+  });
+
+  testWidgets('AWG fields Save сохраняет источник и повторно парсит ноду',
+      (tester) async {
+    final c = await open(tester, awgLink);
+    final fields = (c.entries.single.list.nodes.single as WireguardSpec).awg!;
+    expect(fields.fields['jc'], 3);
+    expect(fields.fields['h1'], isNull);
+
+    final scrollable = find
+        .descendant(
+          of: find.byType(ListView),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    Future<void> reveal(Finder target) async {
+      await tester.scrollUntilVisible(target, 250, scrollable: scrollable);
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> enter(String key, String text) async {
+      final input = find.byKey(ValueKey('awg-$key'));
+      await reveal(input);
+      await tester.enterText(input, text);
+      await tester.pump();
+    }
+
+    await enter('jc', '7');
+    await enter('h1', '100-200');
+    await enter('content_padding_addition', '5-15');
+    final trailers = find.byKey(const ValueKey('awg-random_trailers'));
+    await reveal(trailers);
+    await tester.tap(trailers);
+    await tester.pump();
+    final apply = find.byKey(const ValueKey('awg-apply'));
+    await reveal(apply);
+    await tester.tap(apply);
+    expect(rawOf(c), contains('jc=7'));
+    for (var i = 0;
+        i < 300 &&
+            (c.entries.single.list.nodes.single as WireguardSpec)
+                    .awg
+                    ?.fields['jc'] !=
+                7;
+        i++) {
+      await realIoStep(tester);
+    }
+    await tester.pump();
+
+    expect(rawOf(c), startsWith('awg://'));
+    expect(rawOf(c), contains('h1=100-200'));
+    expect(rawOf(c), contains('contentpaddingaddition=5-15'));
+    expect(rawOf(c).toLowerCase(), contains('randomtrailers=on'));
+    final reparsed =
+        (c.entries.single.list.nodes.single as WireguardSpec).awg!.fields;
+    expect(reparsed['jc'], 7);
+    expect(reparsed['h1'], '100-200');
+    expect(reparsed['content_padding_addition'], '5-15');
+    expect(reparsed['random_trailers'], true);
   });
 }

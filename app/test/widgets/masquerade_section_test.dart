@@ -123,6 +123,102 @@ void main() {
     ]);
   });
 
+  testWidgets('chrome-full is an advanced browser choice with an LTE warning',
+      (tester) async {
+    const warning =
+        'Experimental: the full Chrome signature may fail on LTE networks.';
+    await pump(
+      tester,
+      value: const Masquerade(ip: 'quic', id: 'a.example', ib: 'chrome'),
+    );
+    expect(
+      find.byKey(const ValueKey('masquerade-browser-warning')),
+      findsNothing,
+    );
+
+    await tapAndSettle(tester, browserRow);
+    final option = find.byKey(const ValueKey('masquerade-option-chrome-full'));
+    final tile = tester.widget<RadioListTile<String>>(option);
+    expect((tile.title! as Text).data, 'Chrome Full (experimental)');
+    expect((tile.subtitle! as Text).data, warning);
+    expect(written, isEmpty);
+
+    await tapAndSettle(tester, option);
+    expect(written, [
+      const Masquerade(
+        ip: 'quic',
+        id: 'a.example',
+        ib: 'chrome-full',
+      ),
+    ]);
+
+    await pump(
+      tester,
+      value: const Masquerade(ip: 'quic', id: 'a.example', ib: 'chrome-full'),
+    );
+    expect(find.text('Chrome Full (experimental)'), findsOneWidget);
+    expect(find.text(warning), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('masquerade-browser-warning')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('MasqueradeFields keeps Chrome as default and accepts chrome-full',
+      (tester) async {
+    final domain = TextEditingController();
+    addTearDown(domain.dispose);
+    var ib = 'chrome';
+    final changed = <String>[];
+
+    Future<void> pumpFields() => tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MasqueradeFields(
+            ip: 'quic',
+            ib: ib,
+            domain: domain,
+            onIpChanged: (_) {},
+            onIbChanged: (v) {
+              ib = v;
+              changed.add(v);
+            },
+          ),
+        ),
+      ),
+    );
+
+    await pumpFields();
+    final browser = find.byKey(const ValueKey('masquerade-ib-chrome'));
+    final initial = tester.widget<DropdownButtonFormField<String>>(browser);
+    expect(initial.initialValue, 'chrome');
+    expect(initial.decoration.helperText, isNull);
+    expect(
+      tester
+          .widget<DropdownButton<String>>(
+            find.descendant(
+              of: browser,
+              matching: find.byType(DropdownButton<String>),
+            ),
+          )
+          .items!
+          .map((item) => item.value),
+      ['chrome', 'firefox', 'curl', 'chrome-full'],
+    );
+
+    initial.onChanged!('chrome-full');
+    await pumpFields();
+    final selected = tester.widget<DropdownButtonFormField<String>>(
+      find.byKey(const ValueKey('masquerade-ib-chrome-full')),
+    );
+    expect(changed, ['chrome-full']);
+    expect(selected.initialValue, 'chrome-full');
+    expect(
+      selected.decoration.helperText,
+      'Experimental: the full Chrome signature may fail on LTE networks.',
+    );
+  });
+
   testWidgets('DNS: an empty domain gets a random one', (tester) async {
     await pump(tester, randomDomain: () => 'pool.example');
     await pickProtocol(tester, 'dns');

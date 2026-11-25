@@ -184,6 +184,90 @@ void main() {
     }, skip: corpusTestSkip('masquerade_source_test'));
   });
 
+  group('AWG fields', () {
+    const key = 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=';
+
+    test('INI writes ranges, AWG3 names and on/off booleans', () {
+      final out = withAwgFields(ini, {
+        'h1': '100-200',
+        'header_protection_key': key,
+        's1': 12,
+        's2': 13,
+        's3': 14,
+        's4': 15,
+        'content_padding_addition': '5-9',
+        'random_trailers': true,
+        'disable_cookies': false,
+      });
+      expect(out, contains('H1 = 100-200\n'));
+      expect(out, contains('HeaderProtectionKey = $key\n'));
+      expect(out, contains('ContentPaddingAddition = 5-9\n'));
+      expect(out, contains('RandomTrailers = on\n'));
+      expect(out, isNot(contains('DisableCookies')));
+      final fields = parseOne(out).awg!.fields;
+      expect(fields['h1'], '100-200');
+      expect(fields[Awg.headerKey], key);
+      expect(fields['content_padding_addition'], '5-9');
+      expect(fields['random_trailers'], true);
+      expect(fields.containsKey('disable_cookies'), isFalse);
+
+      final off = withAwgFields(out, {'random_trailers': false});
+      expect(off, isNot(contains('RandomTrailers')));
+      expect(parseOne(off).awg!.fields.containsKey('random_trailers'), isFalse);
+    });
+
+    test('link keeps other params and encodes the standard-base64 key', () {
+      const link =
+          'awg://AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=@host.example.com:9494'
+          '?address=10.200.0.6%2F32&publickey=AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE%3D'
+          '&allowedips=0.0.0.0%2F0&h1=100-200&jc=5#node';
+      final out = withAwgFields(link, {
+        'h1': '200-300',
+        'header_protection_key': key,
+        's1': 12,
+        's2': 13,
+        's3': 14,
+        's4': 15,
+        'random_trailers': true,
+      });
+      expect(out, contains('&h1=200-300'));
+      expect(
+        out,
+        contains('&headerprotectionkey=${Uri.encodeQueryComponent(key)}'),
+      );
+      expect(out, contains('&randomtrailers=on'));
+      expect(out, endsWith('#node'));
+      final fields = parseOne(out).awg!.fields;
+      expect(fields['h1'], '200-300');
+      expect(fields[Awg.headerKey], key);
+      expect(fields['random_trailers'], true);
+    });
+
+    test('JSON keeps types and null removes a field', () {
+      const src = '{"type":"wireguard","tag":"wg-json","h1":"1-2"}';
+      final out = withAwgFields(src, {
+        'h1': '3-4',
+        'max_handshake_attempts': 7,
+        'random_trailers': true,
+      });
+      final body = jsonDecode(out) as Map;
+      expect(body['h1'], '3-4');
+      expect(body['max_handshake_attempts'], 7);
+      expect(body['random_trailers'], true);
+      final off =
+          jsonDecode(withAwgFields(out, {'random_trailers': false})) as Map;
+      expect(off.containsKey('random_trailers'), isFalse);
+    });
+
+    test('packed and unsupported sources stay unchanged', () {
+      final packed = 'awg://${base64.encode(utf8.encode(ini))}';
+      expect(withAwgFields(packed, {'h1': '1-2'}), packed);
+      const xray = '{"protocol":"wireguard","tag":"x"}';
+      expect(withAwgFields(xray, {'h1': '1-2'}), xray);
+      expect(withAwgFields(ini, {'unknown': 1}), ini);
+    });
+  });
+
   group('masqueradeWritability', () {
     test('awg:// base64 and vpn:// are packed', () {
       final b64 = base64.encode(utf8.encode(ini));

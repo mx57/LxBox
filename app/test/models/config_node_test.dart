@@ -153,6 +153,62 @@ void main() {
     });
   });
 
+  group('isAwg3', () {
+    test('plain WG and AWG2 fields are not AWG3', () {
+      final pc = ParsedConfig.parse(cfg({
+        'outbounds': [
+          {'tag': 'plain', 'type': 'wireguard'},
+          {
+            'tag': 'awg2',
+            'type': 'wireguard',
+            'jc': 5,
+            's1': 20,
+            'h1': 100,
+          },
+        ],
+      }));
+      expect(pc['plain']?.isAwg3, false);
+      expect(pc['awg2']?.isAwg3, false);
+    });
+
+    test('AWG3 fields and ranged keepalive are AWG3', () {
+      final pc = ParsedConfig.parse(cfg({
+        'outbounds': [
+          {
+            'tag': 'ranged',
+            'type': 'wireguard',
+            'peers': [
+              {
+                'public_key': 'key',
+                'persistent_keepalive_interval': '10-20',
+              },
+            ],
+          },
+          {
+            'tag': 'explicit',
+            'type': 'wireguard',
+            'header_protection_key': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+          },
+        ],
+      }));
+      expect(pc['ranged']?.isAwg3, true);
+      expect(pc['explicit']?.isAwg3, true);
+    });
+
+    test('AWG3-looking fields on another outbound stay false', () {
+      final pc = ParsedConfig.parse(cfg({
+        'outbounds': [
+          {
+            'tag': 'other',
+            'type': 'vless',
+            'header_protection_key': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+          },
+        ],
+      }));
+      expect(pc['other']?.isAwg3, false);
+    });
+  });
+
   group('nodeCount + malformed/empty', () {
     test('counts non-control outbounds + endpoints', () {
       final pc = ParsedConfig.parse(cfg({

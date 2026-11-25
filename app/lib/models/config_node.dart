@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../services/contract/protocol_level.dart';
+import '../models/node_spec.dart' show Awg;
 import '../services/preset_nodes_view.dart' show nodeHasNoInternetRoute;
 import '../services/tag_resolver.dart';
 
@@ -70,6 +71,8 @@ class ConfigNode {
   /// `flow=xtls-rprx-vision`) по конфигу.
   /// §103 — вычисляется один раз в [ParsedConfig.parse] (eager, не getter).
   final String? securityLabel;
+
+  bool get isAwg3 => type == 'wireguard' && Awg.hasAwg3Json(raw);
 
   /// Порядок слота: `vhttp` (masque) → `transport.type` → роль `variant`
   /// реестра → `tcp` у v2ray-протоколов без транспорта → пусто.

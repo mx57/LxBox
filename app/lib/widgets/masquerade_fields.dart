@@ -16,8 +16,9 @@ import '../services/wireguard/masquerade_source.dart';
 /// Протоколы маскировки (`ip`).
 const kMasqueradeProtocols = ['quic', 'dns', 'stun', 'sip'];
 
-/// Профили клиента у `quic` (`ib`).
-const kMasqueradeBrowsers = ['chrome', 'firefox', 'curl'];
+/// Профили клиента у `quic` (`ib`). `chrome-full` — экспериментальный и
+/// намеренно стоит последним: обычный Chrome остаётся профилем по умолчанию.
+const kMasqueradeBrowsers = ['chrome', 'firefox', 'curl', 'chrome-full'];
 
 /// Имя протокола; `''` — Off.
 String masqueradeProtocolName(String v) => switch (v) {
@@ -35,7 +36,16 @@ String masqueradeBrowserName(String v) => switch (v) {
   'chrome' => 'Chrome', // l10n-exempt: brand name
   'firefox' => 'Firefox', // l10n-exempt: brand name
   'curl' => 'curl', // l10n-exempt: brand name
+  'chrome-full' => getLocalText.s("Chrome Full (experimental)"),
   _ => v,
+};
+
+/// Предупреждение только для экспериментального полного профиля Chrome.
+String? masqueradeBrowserHint(String v) => switch (v) {
+  'chrome-full' => getLocalText.s(
+    "Experimental: the full Chrome signature may fail on LTE networks.",
+  ),
+  _ => null,
 };
 
 /// Подсказка по протоколу: что значит домен и обязателен ли он.
@@ -224,7 +234,10 @@ class MasqueradeFields extends StatelessWidget {
             key: ValueKey('masquerade-ib-$ibValue'),
             initialValue: ibValue,
             isExpanded: true,
-            decoration: decoration(getLocalText.s("Browser")),
+            decoration: decoration(
+              getLocalText.s("Browser"),
+              helper: masqueradeBrowserHint(ibValue),
+            ),
             items: [
               for (final v in kMasqueradeBrowsers)
                 DropdownMenuItem(
@@ -288,6 +301,9 @@ class MasqueradeSection extends StatelessWidget {
     );
     final enabled = unavailableReason == null;
     final ip = value.ip ?? '';
+    final browserHint = ip == 'quic'
+        ? masqueradeBrowserHint(value.ib ?? '')
+        : null;
     final showDomain = ip == 'quic' || ip == 'dns' || ip == 'sip';
 
     void tap(Future<void> Function() open) {
@@ -339,6 +355,19 @@ class MasqueradeSection extends StatelessWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => tap(() => _pickBrowser(context)),
           ),
+        if (browserHint != null)
+          Padding(
+            key: const ValueKey('masquerade-browser-warning'),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.info_outline, size: 16),
+                const SizedBox(width: 8),
+                Expanded(child: Text(browserHint, style: note)),
+              ],
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Text(masqueradeProtocolHint(ip), style: note),
@@ -378,6 +407,7 @@ class MasqueradeSection extends StatelessWidget {
       current: current,
       options: ['', ...kMasqueradeBrowsers],
       label: masqueradeBrowserName,
+      note: masqueradeBrowserHint,
     );
     if (picked == null || picked == current) return;
     await onChanged(
@@ -399,6 +429,7 @@ class MasqueradeSection extends StatelessWidget {
     required List<String> options,
     required String Function(String) label,
     String? Function(String)? disabledNote,
+    String? Function(String)? note,
   }) => showDialog<String>(
     context: context,
     builder: (ctx) => SimpleDialog(
@@ -416,7 +447,7 @@ class MasqueradeSection extends StatelessWidget {
                   value: v,
                   enabled: disabledNote?.call(v) == null,
                   title: Text(label(v)),
-                  subtitle: switch (disabledNote?.call(v)) {
+                  subtitle: switch (disabledNote?.call(v) ?? note?.call(v)) {
                     final String n => Text(n),
                     null => null,
                   },

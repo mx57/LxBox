@@ -8,6 +8,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- **AmneziaWG fields are editable and checked before Save ([task 742](docs/spec/tasks/742-awg-node-fields-ui.md)).** Node Settings exposes junk and magic headers, I1-I5, the header protection key, AWG3 padding/timings and booleans while preserving URI, WG INI and sing-box JSON sources. Invalid ranges, overlapping headers, short padding and masquerade conflicts are blocked; header keys can be generated securely, and AWG3 cards explain that the values must match the server. The experimental `chrome-full` QUIC browser profile is accepted with an LTE warning.
+  (RU: в настройках узла можно редактировать junk и magic headers, I1-I5, ключ защиты заголовка, padding/тайминги и булевы поля AWG3; формат ссылки, WG INI или sing-box JSON сохраняется. Некорректные диапазоны, перекрывающиеся заголовки, короткий padding и конфликты с masquerade блокируются, ключ можно сгенерировать криптографически стойко, а карточки AWG3 объясняют необходимость совпадения с сервером. Экспериментальный QUIC-профиль `chrome-full` принимается с предупреждением о LTE.)
+
 ### Fixed
 
 - **Endpoint scanning keeps Cloudflare locations and parses IPv6 safely ([task 741](docs/spec/tasks/741-evolution-audit-phases-0-2.md)).** The scanner again identifies Cloudflare colos and countries, prefers the colo over the client location, filters pseudo-countries and splits bracketed IPv6 endpoints without corrupting the port. Applied bootstrap patches were removed from the repository.

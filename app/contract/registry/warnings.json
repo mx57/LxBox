@@ -1117,6 +1117,30 @@
       "dart": null,
       "go": "правило реестра contract/registry/protocols/wireguard.json body.fields.{s3,s4,id,ip,ib,content_padding_addition,rekey_after_time,rekey_timeout,reject_after_time,keepalive_timeout,max_handshake_attempts,random_trailers,disable_cookies}.on_invalid (drop); исполнение — core/config/nodeflow/sanitize.go:sanitizer.onInvalid"
     },
+    "ib_chrome_full_experimental": {
+      "severity": "info",
+      "params": [
+        "path",
+        "value"
+      ],
+      "title_en": "AmneziaWG 3.x: experimental full Chrome profile",
+      "title_ru": "AmneziaWG 3.x: экспериментальный полный профиль Chrome",
+      "text_en": "The AmneziaWG 3.x field {path} is {value}, an experimental full Chrome masquerade profile. The value was kept unchanged, but it may fail on LTE or other mobile networks. Use it only when the server is configured for the same profile.",
+      "text_ru": "Поле AmneziaWG 3.x {path} содержит {value} — экспериментальный полный профиль Chrome. Значение сохранено без изменений, но в LTE и других мобильных сетях подключение может не работать. Используйте его только с сервером, настроенным на тот же профиль.",
+      "cause_en": "The full Chrome signature is an experimental option rather than a stable default. Its client fingerprint may not be carried reliably by some mobile-network paths.",
+      "cause_ru": "Полный профиль Chrome — экспериментальный вариант, а не стабильный профиль по умолчанию. Его клиентский отпечаток некоторые мобильные каналы передают ненадёжно.",
+      "fix_en": [
+        "Nothing is required for import: the configured value is preserved.",
+        "If the node fails on LTE or another mobile network, choose the regular chrome profile and use a server configured for it."
+      ],
+      "fix_ru": [
+        "При импорте ничего делать не нужно: заданное значение сохраняется.",
+        "Если узел не работает в LTE или другой мобильной сети, выберите обычный профиль chrome и сервер, настроенный на него."
+      ],
+      "desc": "Локальный патч LxBox SPEC 742, фаза 3: ib=chrome-full сохраняется после trim_lower и даёт info-advisory; LTE и другие мобильные сети могут не пропускать этот экспериментальный отпечаток. Исходник лаунчера в этом checkout недоступен, source_sha остаётся пустым; Go-реализации здесь нет.",
+      "dart": null,
+      "go": null
+    },
     "awg3_header_key_invalid": {
       "severity": "error",
       "params": [],

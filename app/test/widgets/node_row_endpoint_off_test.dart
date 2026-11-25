@@ -7,7 +7,7 @@ import 'package:lxbox/widgets/node_view_item.dart';
 /// §557 — выключенный WG/AWG-узел в списке: не таймаут, а «off»; пункт
 /// меню выключателя есть только при переданном колбэке.
 void main() {
-  NodeViewItem item(String endpointState) => NodeViewItem(
+  NodeViewItem item(String endpointState, {String? infoLine}) => NodeViewItem(
     tag: 'wg-de',
     active: false,
     highlighted: false,
@@ -19,6 +19,7 @@ void main() {
     urltestNow: null,
     hasDetour: false,
     protocolLabel: 'WireGuard',
+    infoLine: infoLine,
   );
 
   Widget host(NodeViewItem i, {VoidCallback? onToggle}) => MaterialApp(
@@ -43,5 +44,21 @@ void main() {
     await tester.tap(find.text('Turn off'));
     await tester.pumpAndSettle();
     expect(taps, 1);
+  });
+
+  testWidgets('без infoLine обычная высота 56', (tester) async {
+    await tester.pumpWidget(host(item('')));
+    expect(find.byKey(const ValueKey('node-info-line')), findsNothing);
+    expect(tester.getSize(find.byType(NodeRow)).height, 56);
+  });
+
+  testWidgets('infoLine показан отдельно и увеличивает высоту до 72', (
+    tester,
+  ) async {
+    const info = 'AWG3 settings must match the server.';
+    await tester.pumpWidget(host(item('', infoLine: info)));
+    expect(find.byKey(const ValueKey('node-info-line')), findsOneWidget);
+    expect(find.text(info), findsOneWidget);
+    expect(tester.getSize(find.byType(NodeRow)).height, 72);
   });
 }
