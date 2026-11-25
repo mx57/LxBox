@@ -76,6 +76,13 @@ void main() {
     final endpoint = node!.emitRaw(TemplateVars.empty).map;
     _expectSafeEndpoint(endpoint);
     expect(endpoint['header_protection_key'], _syntheticHeader);
+    final config = _standConfig(endpoint);
+    expect(config['endpoints'], [endpoint]);
+    expect(
+      (config['outbounds'] as List).single,
+      {'type': 'direct', 'tag': 'direct'},
+    );
+    expect((config['route'] as Map)['final'], endpoint['tag']);
   });
 
   test('stand log redacts secrets split across output chunks', () {
@@ -124,25 +131,7 @@ void main() {
         _expectSafeEndpoint(endpoint);
         final config = File('${_runtime.path}/client.sing-box.json');
         config.writeAsStringSync(
-          const JsonEncoder.withIndent('  ').convert({
-            'log': {'level': 'warn'},
-            'inbounds': [
-              {
-                'type': 'mixed',
-                'tag': 'stand-in',
-                'listen': '127.0.0.1',
-                'listen_port': 18080,
-              },
-            ],
-            'outbounds': [
-              {'type': 'direct', 'tag': 'direct'},
-              endpoint,
-            ],
-            'route': {
-              'final': endpoint['tag'],
-              'rules': <Map<String, Object>>[],
-            },
-          }),
+          const JsonEncoder.withIndent('  ').convert(_standConfig(endpoint)),
         );
         final chmod = await _run(['chmod', '600', config.path]);
         log.add(chmod.stderr.toString());
@@ -258,6 +247,26 @@ void main() {
     timeout: const Timeout(Duration(minutes: 10)),
   );
 }
+
+Map<String, Object> _standConfig(Map<String, dynamic> endpoint) => {
+  'log': {'level': 'warn'},
+  'inbounds': [
+    {
+      'type': 'mixed',
+      'tag': 'stand-in',
+      'listen': '127.0.0.1',
+      'listen_port': 18080,
+    },
+  ],
+  'outbounds': [
+    {'type': 'direct', 'tag': 'direct'},
+  ],
+  'endpoints': [endpoint],
+  'route': {
+    'final': endpoint['tag'],
+    'rules': <Map<String, Object>>[],
+  },
+};
 
 void _expectSafeEndpoint(Map<String, dynamic> endpoint) {
   expect(endpoint['type'], 'wireguard');
