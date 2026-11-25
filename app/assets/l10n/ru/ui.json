@@ -7472,8 +7472,8 @@
   "The endpoint pool is empty — run the endpoint scanner first": {
     "value": "Пул конечных точек пуст — сначала запустите сканер конечных точек"
   },
-  "There are no usable configs to evolve — generate or import WARP nodes first": {
-    "value": "Нет пригодных конфигов для эволюции — сначала сгенерируйте или импортируйте узлы WARP"
+  "There are no usable configs to evolve — generate or import WARP or WireGuard/AmneziaWG nodes first": {
+    "value": "Нет пригодных конфигов для эволюции — сначала сгенерируйте или импортируйте узлы WARP, WireGuard или AmneziaWG"
   },
   "TLS fragmentation": {
     "value": "Фрагментация TLS"
@@ -7487,8 +7487,11 @@
   "WARP CPS (experimental)": {
     "value": "WARP CPS (экспериментальный)"
   },
-  "WARP seed filtering is unavailable — private WireGuard/AmneziaWG configs may be included": {
-    "value": "Фильтр семян WARP недоступен — в посев могут попасть приватные конфиги WireGuard/AmneziaWG"
+  "WARP genomes": {
+    "value": "Геномы WARP"
+  },
+  "Foreign detour": {
+    "value": "Чужой detour"
   },
   "AmneziaWG 3.0": {
     "value": "AmneziaWG 3.0"

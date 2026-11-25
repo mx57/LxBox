@@ -5,11 +5,10 @@
 // эмитированного тела (тот же `emit`, что уходит в боевой конфиг), и из тела
 // считываются значения локусов генома.
 //
-// Что НЕ попадает в посев, и почему это надо показать, а не промолчать:
-// эволюция мутирует тела WARP-узлов (AWG/MASQUE) — только они собираются через
-// [ScanNodeBuilder] с аккаунтами WARP. Подписные протоколы (vless/trojan/…)
-// эволюции недоступны: у движка нет их билдера, и «смутить» их было бы
-// подменой смысла. Поэтому пропущенные считаются и выводятся на экран.
+// WARP/MASQUE-узлы мутируются через [ScanNodeBuilder] с аккаунтами WARP.
+// Приватные WG/AWG оцениваются дословно, без подмены кредов и AWG-параметров.
+// Подписные протоколы (vless/trojan/…) эволюции недоступны: у движка нет их
+// билдера, и «смутить» их было бы подменой смысла.
 
 import '../../models/node_spec.dart' show NodeSpec;
 import '../../models/template_vars.dart' show TemplateVars;
@@ -32,8 +31,8 @@ enum SeedSkipReason {
   /// `emit` бросил — узел не разбирается.
   broken,
 
-  /// WG/AWG вне WARP-пула: оценщик пересобрал бы его с кредами WARP.
-  privateServer,
+  /// Узел зависит от чужого detour: без его конфига отдельная проба неверна.
+  foreignDetour,
 }
 
 /// Результат посева.
@@ -50,6 +49,9 @@ class SeedSet {
 
   int get skippedCount => skipped.values.fold(0, (a, b) => a + b);
 
+  int get warpCount => genomes.where((g) => !g.isVerbatim).length;
+  int get privateCount => genomes.where((g) => g.isVerbatim).length;
+
   bool get isEmpty => genomes.isEmpty;
 
   static SeedSet get empty =>
@@ -58,9 +60,9 @@ class SeedSet {
 
 /// Собирает посев из списка узлов (экран передаёт `entry.list.nodes` по всем
 /// источникам). Дубликаты снимаются по [Genome.key] — два одинаковых узла дали
-/// бы два одинаковых генома и удвоили бы цену пробы. Если [pool] загружен,
-/// приватные WG/AWG-узлы не становятся WARP-семенами; при `pool == null` фильтр
-/// fail-open, потому что экран уже сообщает о недоступном asset.
+/// бы два одинаковых генома и удвоили бы цену пробы. WG/AWG вне WARP-пула
+/// становятся дословными приватными геномами; без пула безопаснее сохранить
+/// исходное тело, чем пересобрать узел с WARP-кредами.
 SeedSet seedsFromNodes(Iterable<NodeSpec> nodes, {ScanPool? pool}) {
   final genomes = <Genome>[];
   final seen = <String>{};
@@ -72,19 +74,14 @@ SeedSet seedsFromNodes(Iterable<NodeSpec> nodes, {ScanPool? pool}) {
       skipped[SeedSkipReason.group] = (skipped[SeedSkipReason.group] ?? 0) + 1;
       continue;
     }
-    final g = genomeOfNode(n);
+    final g = genomeOfNode(n, pool: pool, allowVerbatim: true);
     if (g == null) {
-      final why = n.protocol == 'masque' || n.protocol == 'wireguard'
-          ? SeedSkipReason.noAddress
-          : SeedSkipReason.notWarp;
+      final why = _hasDetour(n)
+          ? SeedSkipReason.foreignDetour
+          : (n.protocol == 'masque' || n.protocol == 'wireguard'
+              ? SeedSkipReason.noAddress
+              : SeedSkipReason.notWarp);
       skipped[why] = (skipped[why] ?? 0) + 1;
-      continue;
-    }
-    if (g.transport == EvoTransport.awg &&
-        pool != null &&
-        !pool.isWarpWgHost(g.endpoint)) {
-      skipped[SeedSkipReason.privateServer] =
-          (skipped[SeedSkipReason.privateServer] ?? 0) + 1;
       continue;
     }
     if (seen.add(g.key)) genomes.add(g);
@@ -97,9 +94,25 @@ SeedSet seedsFromNodes(Iterable<NodeSpec> nodes, {ScanPool? pool}) {
 /// Тело берётся из `emit`, а не из типизированной модели узла: у AWG-обфускации
 /// и MASQUE-параметров разные носители (корень endpoint'а / `tls{}` outbound'а),
 /// и читать их по одному пути дешевле, чем знать про оба.
-Genome? genomeOfNode(NodeSpec node) {
+Genome? genomeOfNode(
+  NodeSpec node, {
+  ScanPool? pool,
+  bool allowVerbatim = false,
+}) {
   try {
     final body = node.emit(TemplateVars.empty).map;
+    final detour = body['detour'];
+    if (allowVerbatim && detour is String && detour.trim().isNotEmpty) {
+      return null;
+    }
+    if (body['type'] == 'wireguard' && allowVerbatim) {
+      final peers = (body['peers'] as List?)?.cast<Map<String, dynamic>>() ??
+          const <Map<String, dynamic>>[];
+      final address = peers.isEmpty ? '' : '${peers.first['address'] ?? ''}';
+      if (pool == null || !pool.isWarpWgHost(address)) {
+        return GenomeVerbatim.fromBody(node.tag, body);
+      }
+    }
     return switch (body['type']) {
       'masque' => _fromMasque(body),
       'wireguard' => _fromWireguard(body),
@@ -107,6 +120,18 @@ Genome? genomeOfNode(NodeSpec node) {
     };
   } catch (_) {
     return null;
+  }
+}
+
+bool _hasDetour(NodeSpec node) {
+  if (node.chained != null) return true;
+  final detour = node.patchedJson?['detour'];
+  if (detour is String && detour.trim().isNotEmpty) return true;
+  try {
+    final detour = node.emit(TemplateVars.empty).map['detour'];
+    return detour is String && detour.trim().isNotEmpty;
+  } catch (_) {
+    return false;
   }
 }
 

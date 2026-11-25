@@ -23,7 +23,8 @@
 import 'dart:convert';
 
 import '../../models/dns_ref.dart';
-import '../../models/node_spec.dart' show NodeSpec, deepCopyJson;
+import '../../models/node_spec.dart'
+    show NodeSpec, WireguardSpec, deepCopyJson;
 import '../../models/singbox_entry.dart' show Endpoint;
 import '../../models/template_vars.dart' show TemplateVars;
 import '../../models/tunnel_status.dart';
@@ -79,14 +80,19 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
   Map<String, String> _vars = const {};
   Map<String, Map<String, dynamic>> _dnsBodyByTag = const {};
   bool _prepared = false;
+  bool _warpPrepared = false;
   bool _stopped = false;
 
   /// §669 — runId текущей probe-сессии (0, если не поднята).
   int _runId = 0;
 
   @override
-  Future<String?> prepare() async {
-    if (_prepared) return null;
+  Future<String?> prepare() => prepareFor(const []);
+
+  @override
+  Future<String?> prepareFor(List<Genome> genomes) async {
+    final needsWarp = genomes.any((g) => !g.isVerbatim);
+    if (_prepared && (!needsWarp || _warpPrepared)) return null;
     // Probe-сессия и боевой туннель в одном процессе не уживаются (два
     // CommandServer невозможны, §236) — поэтому эволюция идёт только на
     // выключенном VPN, и это надо сказать пользователю прямо.
@@ -100,61 +106,66 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
       log.w('evo', 'VPN status unavailable ($e) — trying anyway');
     }
 
-    final now = DateTime.now().toUtc().toIso8601String();
-    final client = _warp ?? WarpClient();
-    try {
-      var warpAcc = await SettingsStorage.getWarpAccount();
-      var masqueAcc = await SettingsStorage.getMasqueAccount();
-      log.i(
-        'evo',
-        'accounts: WARP=${warpAcc != null ? 'ok' : 'none'} '
-        'MASQUE=${masqueAcc != null ? 'ok' : 'none'}',
-      );
-      // Регистрация — штатным клиентом с сохранением в хранилище: эволюция не
-      // заводит «свои» аккаунты в обход генератора.
-      if (warpAcc == null) {
-        try {
-          warpAcc = await client.register(
-            endpoint: WarpAccount.defaultEndpoint,
-            nowIso8601: now,
-          );
-          await SettingsStorage.setWarpAccount(warpAcc);
-          log.i('evo', 'WARP account registered');
-        } catch (e) {
-          log.e('evo', 'WARP register failed: $e');
+    if (needsWarp && !_warpPrepared) {
+      final now = DateTime.now().toUtc().toIso8601String();
+      final client = _warp ?? WarpClient();
+      try {
+        var warpAcc = await SettingsStorage.getWarpAccount();
+        var masqueAcc = await SettingsStorage.getMasqueAccount();
+        log.i(
+          'evo',
+          'accounts: WARP=${warpAcc != null ? 'ok' : 'none'} '
+          'MASQUE=${masqueAcc != null ? 'ok' : 'none'}',
+        );
+        // Регистрация — штатным клиентом с сохранением в хранилище: эволюция не
+        // заводит «свои» аккаунты в обход генератора.
+        if (warpAcc == null) {
+          try {
+            warpAcc = await client.register(
+              endpoint: WarpAccount.defaultEndpoint,
+              nowIso8601: now,
+            );
+            await SettingsStorage.setWarpAccount(warpAcc);
+            log.i('evo', 'WARP account registered');
+          } catch (e) {
+            log.e('evo', 'WARP register failed: $e');
+          }
         }
-      }
-      if (masqueAcc == null) {
-        try {
-          masqueAcc = await client.registerMasque(nowIso8601: now);
-          await SettingsStorage.setMasqueAccount(masqueAcc);
-          log.i('evo', 'MASQUE account registered');
-        } catch (e) {
-          log.e('evo', 'MASQUE register failed: $e');
+        if (masqueAcc == null) {
+          try {
+            masqueAcc = await client.registerMasque(nowIso8601: now);
+            await SettingsStorage.setMasqueAccount(masqueAcc);
+            log.i('evo', 'MASQUE account registered');
+          } catch (e) {
+            log.e('evo', 'MASQUE register failed: $e');
+          }
         }
+        if (warpAcc == null && masqueAcc == null) {
+          return 'No WARP account could be obtained (registration failed)';
+        }
+        _builder = ScanNodeBuilder(
+          warp: warpAcc,
+          masque: masqueAcc,
+          wgKeepalive: wgKeepalive > 0
+              ? wgKeepalive
+              : (pool?.wgKeepalive ?? 0),
+        );
+        _warpPrepared = true;
+      } finally {
+        if (_warp == null) client.close();
       }
-      if (warpAcc == null && masqueAcc == null) {
-        return 'No WARP account could be obtained (registration failed)';
-      }
-      _builder = ScanNodeBuilder(
-        warp: warpAcc,
-        masque: masqueAcc,
-        wgKeepalive: wgKeepalive > 0
-            ? wgKeepalive
-            : (pool?.wgKeepalive ?? 0),
-      );
-    } finally {
-      if (_warp == null) client.close();
     }
 
-    _coreVersion = await CoreVersionCache.ensure(() => _vpn.getCoreVersion());
-    _vars = await loadProbeVars();
-    _dnsBodyByTag = await _dnsBodies();
-    _prepared = true;
-    log.i(
-      'evo',
-      'ready: core=$_coreVersion dns tags=${_dnsBodyByTag.keys.join(', ')}',
-    );
+    if (!_prepared) {
+      _coreVersion = await CoreVersionCache.ensure(() => _vpn.getCoreVersion());
+      _vars = await loadProbeVars();
+      _dnsBodyByTag = await _dnsBodies();
+      _prepared = true;
+      log.i(
+        'evo',
+        'ready: core=$_coreVersion dns tags=${_dnsBodyByTag.keys.join(', ')}',
+      );
+    }
     return null;
   }
 
@@ -187,8 +198,7 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
     bool Function()? budgetExceeded,
   }) async {
     final out = [for (var i = 0; i < genomes.length; i++) <Observation>[]];
-    final builder = _builder;
-    if (builder == null || genomes.isEmpty) {
+    if (!_prepared || genomes.isEmpty) {
       for (var i = 0; i < genomes.length; i++) {
         final o = const Observation.failed('evaluator is not prepared');
         out[i].add(o);
@@ -215,7 +225,7 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
       // (см. `buildProbeBatches`), а до этого сюда попадал сжатый список узлов —
       // и после первого же несобранного узла вердикты уезжали на чужие геномы.
       final nodes = <NodeSpec?>[
-        for (final i in indexes) _buildNode(genomes[i], builder),
+        for (final i in indexes) _buildNode(genomes[i]),
       ];
       // Причина «вердикта нет» на каждую особь: её знает гард реестра
       // (`brokenByIndex`), а без него — наш билдер или сорванный probeStart.
@@ -328,9 +338,7 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
   /// парсер папки принимает дословное sing-box-тело
   /// (`body_decoder`: `outbounds[]+endpoints[]`), поэтому экспорт честнее ссылки.
   String? exportFor(Genome g) {
-    final builder = _builder;
-    if (builder == null) return null;
-    final node = _buildNode(g, builder);
+    final node = _buildNode(g);
     if (node == null) return null;
     try {
       final entry = node.getEntries(null).main;
@@ -345,11 +353,28 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
     }
   }
 
-  /// Узел генома: штатный билдер (креды WARP/MASQUE → URI) → парсер → узел, и
-  /// поверх — мутация генома в `patchedJson`. Это ТО ЖЕ эмитированное тело, что
-  /// уходит в боевой конфиг, и дальше его проверяет гард реестра.
-  NodeSpec? _buildNode(Genome g, ScanNodeBuilder builder) {
+  /// Узел генома: WARP/MASQUE идут через штатный билдер, приватный WG/AWG —
+  /// напрямую через `patchedJson`. Мутации накладываются на эмитированное тело,
+  /// которое дальше проверяет гард реестра.
+  NodeSpec? _buildNode(Genome g) {
     try {
+      if (g is GenomeVerbatim) {
+        final node = WireguardSpec(
+          id: 'evo-${g.tag}',
+          tag: g.tag,
+          label: g.tag,
+          server: g.endpoint,
+          port: g.port,
+          rawSource: jsonEncode(g.baseBody),
+          privateKey: '',
+          localAddresses: const [],
+          peers: const [],
+        );
+        node.patchedJson = g.applyTo(g.baseBody);
+        return node;
+      }
+      final builder = _builder;
+      if (builder == null) return null;
       final uri = builder.uriFor(g.toCandidate());
       if (uri == null) return null;
       final node = parseLinkViaPipeline(uri);
@@ -394,6 +419,7 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
     _stopped = true;
     _builder = null;
     _prepared = false;
+    _warpPrepared = false;
     try {
       await _cc.probeStop(_runId);
     } catch (_) {

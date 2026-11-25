@@ -140,10 +140,16 @@ void main() {
       final cps = genomeOfNode(awgNode(profile: AwgProfile.warpCps))!;
       expect(cps.awgProfile, AwgProfile.warpCps);
       expect(genomeOfNode(awgNode())!.awgProfile, AwgProfile.warp15);
-      final set = seedsFromNodes([
-        awgNode(),
-        awgNode(profile: AwgProfile.warpCps),
-      ]);
+      final set = seedsFromNodes(
+        [awgNode(), awgNode(profile: AwgProfile.warpCps)],
+        pool: ScanPool.fromFullJson({
+          'wireguard': {
+            'v4_cidr': ['162.159.192.0/24'],
+            'ports': [2408],
+            'endpoints_preset': ['engage.cloudflareclient.com:2408'],
+          },
+        })!,
+      );
       expect(set.genomes, hasLength(2), reason: 'профиль входит в identity');
     });
 
@@ -212,15 +218,20 @@ void main() {
           },
         })!;
 
-    test('приватный WG/AWG не становится WARP-семенем', () {
+    test('приватный WG/AWG становится дословным геномом, не WARP', () {
       final set = seedsFromNodes(
         [awgNode(ip: '203.0.113.5'), awgNode()],
         pool: warpPool(),
       );
       expect(set.total, 2);
-      expect(set.genomes, hasLength(1));
-      expect(set.genomes.single.endpoint, '162.159.192.7');
-      expect(set.skipped[SeedSkipReason.privateServer], 1);
+      expect(set.genomes, hasLength(2));
+      expect(set.warpCount, 1);
+      expect(set.privateCount, 1);
+      expect(set.skipped, isEmpty);
+      final own = set.genomes.singleWhere((g) => g.isVerbatim);
+      expect(own.endpoint, '203.0.113.5');
+      expect(own.toJson()['mode'], 'verbatim');
+      expect(own.toJson(), isNot(contains('private_key')));
     });
 
     test('WARP preset и MASQUE проходят фильтр', () {
@@ -235,9 +246,10 @@ void main() {
       expect(set.skipped, isEmpty);
     });
 
-    test('недоступный пул оставляет прежнее fail-open поведение', () {
+    test('недоступный пул сохраняет WG/AWG как дословный геном', () {
       final set = seedsFromNodes([awgNode(ip: '203.0.113.5')]);
       expect(set.genomes, hasLength(1));
+      expect(set.genomes.single.isVerbatim, isTrue);
       expect(set.skipped, isEmpty);
     });
 
@@ -249,11 +261,21 @@ void main() {
         },
       })!;
       final set = seedsFromNodes([awgNode()], pool: pool);
-      expect(set.genomes, isEmpty);
-      expect(set.skipped[SeedSkipReason.privateServer], 1);
+      expect(set.genomes, hasLength(1));
+      expect(set.privateCount, 1);
+      expect(set.skipped, isEmpty);
     });
 
-    test('считает看过е узлы и не дублирует одинаковые геномы', () {
+    test('узел с чужим detour не становится прямым семенем', () {
+      final body = awgNode(ip: '203.0.113.5').emit(TemplateVars.empty).map;
+      final node = awgNode(ip: '203.0.113.5')
+        ..patchedJson = (body..['detour'] = 'foreign-exit');
+      final set = seedsFromNodes([node], pool: warpPool());
+      expect(set.genomes, isEmpty);
+      expect(set.skipped[SeedSkipReason.foreignDetour], 1);
+    });
+
+    test('считает все узлы и не дублирует одинаковые геномы', () {
       final set = seedsFromNodes([awgNode(), awgNode(), masqueNode()]);
       expect(set.total, 3);
       expect(set.genomes, hasLength(2));

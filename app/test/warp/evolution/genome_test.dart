@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lxbox/services/evolution/genome.dart';
 import 'package:lxbox/services/warp/awg_profile.dart';
@@ -420,6 +422,130 @@ void main() {
       expect(tls['server_name'], 'ex.org');
       },
     );
+  });
+
+  group('GenomeVerbatim', () {
+    Map<String, dynamic> privateBody() => {
+          'type': 'wireguard',
+          'tag': 'own-awg',
+          'address': ['172.16.0.2/32'],
+          'private_key': 'private-key-must-stay',
+          'mtu': 1280,
+          'ip': 'quic',
+          'jc': 4,
+          'jmin': 40,
+          'jmax': 70,
+          'id': 'yandex.ru',
+          'ib': 'chrome',
+          'i1': '<b 0x01><r 32>',
+          's3': 16,
+          'h1': '100-200',
+          'header_protection_key': 'header-key-must-stay',
+          'content_padding_addition': '12-24',
+          'random_trailers': true,
+          'peers': [
+            {
+              'address': '203.0.113.5',
+              'port': 2408,
+              'public_key': 'peer-key-must-stay',
+              'pre_shared_key': 'psk-must-stay',
+              'allowed_ips': ['0.0.0.0/0'],
+              'persistent_keepalive_interval': '25-35',
+            },
+          ],
+        };
+
+    test('меняет только MTU и keepalive; вход и исходное тело не мутируются', () {
+      final source = privateBody();
+      final before = jsonDecode(jsonEncode(source)) as Map<String, dynamic>;
+      final genome = GenomeVerbatim.fromBody('own-awg', source)!
+          .copyWith(mtu: 1400, keepalive: '30-40', dnsTag: 'own-dns');
+      final body = genome.applyTo({'mtu': 1});
+      final expected = jsonDecode(jsonEncode(before)) as Map<String, dynamic>
+        ..['mtu'] = 1400;
+      ((expected['peers'] as List).first as Map<String, dynamic>)[
+          'persistent_keepalive_interval'] = '30-40';
+
+      expect(body, expected);
+      expect(source, before);
+      expect(genome.baseBody, before);
+      expect(body['private_key'], 'private-key-must-stay');
+      expect(body['header_protection_key'], 'header-key-must-stay');
+      expect(body['i1'], '<b 0x01><r 32>');
+      expect(body['content_padding_addition'], '12-24');
+      expect(body['random_trailers'], isTrue);
+      expect(body, isNot(contains('dnsTag')));
+    });
+
+    test('посев сохраняет ranged keepalive; нули снимают только свои ключи', () {
+      final genome = GenomeVerbatim.fromBody('own-awg', privateBody())!;
+      expect(genome.keepalive, '25-35');
+      final seeded = genome.applyTo(privateBody());
+      expect(
+        ((seeded['peers'] as List).first as Map<String, dynamic>)[
+            'persistent_keepalive_interval'],
+        '25-35',
+      );
+      final cleared = genome.copyWith(mtu: 0, keepalive: 0).applyTo(privateBody());
+      expect(cleared.containsKey('mtu'), isFalse);
+      expect(
+        ((cleared['peers'] as List).first as Map<String, dynamic>)
+            .containsKey('persistent_keepalive_interval'),
+        isFalse,
+      );
+    });
+
+    test('identity несёт режим, tag и DNS, но не утекает телом и ключами', () {
+      final genome = GenomeVerbatim.fromBody('own-awg', privateBody())!;
+      final changedDns = genome.copyWith(dnsTag: 'own-dns');
+      final changedTag = GenomeVerbatim.fromBody('other-awg', privateBody())!;
+      expect(genome.key, startsWith('verbatim:'));
+      expect(changedDns.key, isNot(genome.key));
+      expect(changedTag.key, isNot(genome.key));
+      expect(genome.key, isNot(genome.copyWith(keepalive: 25).key));
+      final report = genome.json;
+      expect(report, contains('verbatim'));
+      expect(report, contains('own-awg'));
+      expect(report, isNot(contains('private-key-must-stay')));
+      expect(report, isNot(contains('peer-key-must-stay')));
+      expect(report, isNot(contains('header-key-must-stay')));
+    });
+
+    test('copyWith игнорирует все фиксированные локусы', () {
+      final genome = GenomeVerbatim.fromBody('own-awg', privateBody())!;
+      final changed = genome.copyWith(
+        endpoint: '9.9.9.9',
+        port: 443,
+        junkProto: 'sip',
+        jc: 8,
+        fragment: true,
+        awgProfile: AwgProfile.warpCps,
+      );
+      expect(changed.endpoint, genome.endpoint);
+      expect(changed.port, genome.port);
+      expect(changed.junkProto, genome.junkProto);
+      expect(changed.jc, genome.jc);
+      expect(changed.fragment, isFalse);
+      expect(changed.awgProfile, genome.awgProfile);
+      expect(changed.key, genome.key);
+    });
+
+    test('distanceTo сравнивает три локуса только внутри одного tag', () {
+      final genome = GenomeVerbatim.fromBody('own-awg', privateBody())!;
+      expect(genome.distanceTo(genome), 0);
+      expect(genome.distanceTo(genome.copyWith(mtu: 1400)), 1 / 3);
+      final other = GenomeVerbatim.fromBody('other-awg', privateBody())!;
+      expect(genome.distanceTo(other), 1);
+      expect(genome.distanceTo(awg), 1);
+    });
+
+    test('foreign detour, отсутствие адреса и не-WG тело отвергаются', () {
+      final foreign = privateBody()..['detour'] = 'foreign-exit';
+      expect(GenomeVerbatim.fromBody('own-awg', foreign), isNull);
+      final noAddress = privateBody()..['address'] = <String>[];
+      expect(GenomeVerbatim.fromBody('own-awg', noAddress), isNull);
+      expect(GenomeVerbatim.fromBody('own-awg', masqueBody()), isNull);
+    });
   });
 
   group('caseShuffle', () {

@@ -75,7 +75,6 @@ class _EvolutionScreenState extends State<EvolutionScreen>
   /// Штатный пул сканера (asset + секция региона): из него эволюция берёт
   /// адреса, порты и SNI-пул. Пустой = мутации некуда ехать, экран это скажет.
   ScanPool? _assetPool;
-  bool _seedFilterUnavailable = false;
   List<DnsServerRef> _dnsRefs = const [];
 
   ProbeGenomeEvaluator? _evaluator;
@@ -157,7 +156,6 @@ class _EvolutionScreenState extends State<EvolutionScreen>
       _assetPool = pool;
       _dnsRefs = dns;
       _seeds = seeds;
-      _seedFilterUnavailable = pool == null;
     });
     // Семена могли прийти после нажатия Start (рейс: экран открылся, пока
     // `_loadContext` ещё вернёт) — тогда ошибка «нет семян» оставлена
@@ -207,7 +205,7 @@ class _EvolutionScreenState extends State<EvolutionScreen>
     if (_running || _preparing) return;
     if (_seeds.genomes.isEmpty) {
       setState(() => _error = getLocalText.s(
-          "There are no usable configs to evolve — generate or import WARP nodes first"));
+          "There are no usable configs to evolve — generate or import WARP or WireGuard/AmneziaWG nodes first"));
       return;
     }
     _ticker?.cancel();
@@ -228,10 +226,11 @@ class _EvolutionScreenState extends State<EvolutionScreen>
     });
     _log.clear();
     _log.i('evo',
-        'campaign start: seeds=${_seeds.genomes.length} pop=${_settings.populationSize} '
-        'gens=${_settings.maxGenerations} budget=${_settings.maxRequests} '
-        'rungs=${_settings.rungAttempts.join(",")} eda=${_settings.useEda} '
-        'seed=${_settings.seed}');
+        'campaign start: seeds=${_seeds.genomes.length} '
+        'warp=${_seeds.warpCount} private=${_seeds.privateCount} '
+        'pop=${_settings.populationSize} gens=${_settings.maxGenerations} '
+        'budget=${_settings.maxRequests} rungs=${_settings.rungAttempts.join(",")} '
+        'eda=${_settings.useEda} seed=${_settings.seed}');
 
     final evaluator = _evaluator ??= ProbeGenomeEvaluator(
       log: _log,
@@ -852,14 +851,11 @@ class _EvolutionScreenState extends State<EvolutionScreen>
               style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
             ),
           ],
-          if (_seedFilterUnavailable) ...[
-            const SizedBox(height: 4),
-            Text(
-              getLocalText.s(
-                  "WARP seed filtering is unavailable — private WireGuard/AmneziaWG configs may be included"),
-              style: TextStyle(fontSize: 11, color: cs.tertiary),
-            ),
-          ],
+          Text(
+            '${getLocalText.s("WARP genomes")}: ${s.warpCount} · '
+            '${getLocalText.s("Private WG/AWG")}: ${s.privateCount}',
+            style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+          ),
           if (s.genomes.isEmpty && s.total > 0) ...[
             const SizedBox(height: 4),
             Text(
@@ -895,7 +891,7 @@ class _EvolutionScreenState extends State<EvolutionScreen>
               ),
             ],
           ),
-          if (_endpointCount == 0) ...[
+          if (s.warpCount > 0 && _endpointCount == 0) ...[
             const SizedBox(height: 6),
             Text(
               getLocalText.s(
@@ -913,7 +909,7 @@ class _EvolutionScreenState extends State<EvolutionScreen>
         SeedSkipReason.group => getLocalText.s("Groups"),
         SeedSkipReason.noAddress => getLocalText.s("No address"),
         SeedSkipReason.broken => getLocalText.s("Unparsable"),
-        SeedSkipReason.privateServer => getLocalText.s("Private WG/AWG"),
+        SeedSkipReason.foreignDetour => getLocalText.s("Foreign detour"),
       };
 
   Widget _honestyNote(ColorScheme cs) => Column(
@@ -1124,7 +1120,9 @@ class _EvolutionScreenState extends State<EvolutionScreen>
 
   Widget _countryCell(Fitness f, ColorScheme cs) {
     final c = f.colo.isNotEmpty ? f.colo : f.country;
-    if (c.isEmpty) return Text('—', style: TextStyle(color: cs.onSurfaceVariant));
+    if (c.isEmpty) {
+      return Text('—', style: TextStyle(color: cs.onSurfaceVariant));
+    }
     final hit = _settings.targetCountry.isNotEmpty &&
         f.country == _settings.targetCountry;
     return Container(

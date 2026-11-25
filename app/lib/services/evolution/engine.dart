@@ -41,6 +41,10 @@ abstract class GenomeEvaluator {
   /// иначе — причина, по которой прогон не стартует (её показывает экран).
   Future<String?> prepare();
 
+  /// Подготовка с учётом состава посева: приватным геномам аккаунты WARP не
+  /// нужны. Старые оценщики достаточно реализуют [prepare].
+  Future<String?> prepareFor(List<Genome> genomes) => prepare();
+
   /// [attempts] проб на каждый геном. Возвращает наблюдения ПО ИНДЕКСУ входа
   /// (короткий список = пробы не дошли). Наблюдения прилетают и через [onOne],
   /// чтобы UI жил во время долгого rung'а. [onOne] вызывается до возврата и в
@@ -177,6 +181,8 @@ class EvolutionEngine {
 
   /// Посев сверх размера популяции: входит в поиск иммигрантами (§848).
   final _reserve = <Genome>[];
+  final _privateSeeds = <GenomeVerbatim>[];
+  int _privateSlots = 0;
 
   bool _cancelled = false;
   bool _started = false;
@@ -227,7 +233,7 @@ class EvolutionEngine {
   Future<EvolutionOutcome> run(List<Genome> seeds) async {
     assert(!_started, 'EvolutionEngine is one-shot; create a new engine');
     _started = true;
-    final reason = await evaluator.prepare();
+    final reason = await evaluator.prepareFor(seeds);
     if (reason != null) {
       _error = reason;
       _note('старт невозможен: $reason');
@@ -240,7 +246,12 @@ class EvolutionEngine {
       );
     }
     final rng = settings.rng();
-    var population = _fill(_dedupe(seeds), rng);
+    final uniqueSeeds = _dedupe(seeds);
+    _privateSeeds
+      ..clear()
+      ..addAll(uniqueSeeds.whereType<GenomeVerbatim>());
+    _privateSlots = _privateTarget(uniqueSeeds);
+    var population = _fill(uniqueSeeds, rng);
     var generation = 0;
     while (generation < settings.maxGenerations &&
         _requestsUsed < settings.maxRequests &&
@@ -343,14 +354,35 @@ class EvolutionEngine {
         if (f.passes > 0) aliveKeys.add(g.key);
       }
       keeps.add(aliveKeys.length);
-      // Отсев по Парето, а не по «лучший RTT»: у одной пробы статистики
-      // скорости нет, зато есть «прошёл / не прошёл».
-      if (aliveKeys.length > settings.keepOf(aliveKeys.length)) {
-        final scored = [for (final k in aliveKeys) current[k]!];
-        final take = settings.keepOf(scored.length);
-        final order =
-            nsga2Order(scored, targetCountry: settings.targetCountry);
-        aliveKeys = [for (final i in order.take(take)) scored[i].genome.key];
+      // Отсев по Парето внутри каждого режима: WARP и приватный результат не
+      // соревнуются за одни слоты, иначе удачный WARP-прогон может вытеснить
+      // приватные серверы из следующего ранга только из-за пропорции популяции.
+      final take = settings.keepOf(aliveKeys.length);
+      if (aliveKeys.length > take) {
+        final privateAlive =
+            aliveKeys.where((k) => current[k]!.genome.isVerbatim).length;
+        final warpAlive = aliveKeys.length - privateAlive;
+        var privateTake = privateAlive == 0
+            ? 0
+            : (take * privateAlive / aliveKeys.length)
+                .round()
+                .clamp(privateAlive > 0 && take > 0 ? 1 : 0, privateAlive);
+        if (warpAlive > 0 && take > 0 && privateTake == take) privateTake--;
+        final warpTake = take - privateTake;
+        List<String> kept(bool private, int quota) {
+          final scored = [
+            for (final k in aliveKeys)
+              if (current[k]!.genome.isVerbatim == private) current[k]!,
+          ];
+          if (scored.length <= quota) {
+            return [for (final f in scored) f.genome.key];
+          }
+          final order =
+              nsga2Order(scored, targetCountry: settings.targetCountry);
+          return [for (final i in order.take(quota)) scored[i].genome.key];
+        }
+
+        aliveKeys = [...kept(false, warpTake), ...kept(true, privateTake)];
       }
       tier = aliveKeys;
     }
@@ -400,20 +432,42 @@ class EvolutionEngine {
     return summary;
   }
 
-  /// Следующее поколение: элита (μ) + потомки (λ) + иммигранты.
+  /// Следующее поколение: элита (μ) + потомки (λ) + иммигранты. WARP и
+  /// приватные геномы ранжируются и размножаются отдельно.
   List<Genome> _nextGeneration(Random rng) {
     final observed = [
       for (final r in _records.values)
         if (r.lifetime.attempts > 0) r.lifetime,
     ];
     if (observed.isEmpty) return _fill(const [], rng);
-    final order = nsga2Order(observed, targetCountry: settings.targetCountry);
-    final ranked = [for (final i in order) observed[i]];
-    final elites = ranked.take(settings.eliteSize).map((f) => f.genome).toList();
-    // Предложение: архив славы во вход EDA — победы, подтверждённые сессиями,
-    // должны тоже формировать распределение новых геномов (чуть слабее элиты).
-    final hofGenomes = hallOfFame.map((f) => f.genome).toList();
-    // Одна особь может быть и элитой, и HoF: складываем вес в одну запись модели.
+    List<Fitness> ranked(Iterable<Fitness> source) {
+      final list = source.toList();
+      final order = nsga2Order(list, targetCountry: settings.targetCountry);
+      return [for (final i in order) list[i]];
+    }
+
+    final warpRanked = ranked(observed.where((f) => !f.genome.isVerbatim));
+    final privateRanked = ranked(observed.where((f) => f.genome.isVerbatim));
+    final eliteTotal = settings.eliteSize;
+    final privateElites = _privateSlots == 0
+        ? 0
+        : _privateSlots == settings.populationSize
+            ? eliteTotal
+            : (eliteTotal * _privateSlots / settings.populationSize)
+                .round()
+                .clamp(1, eliteTotal - 1);
+    final warpElites = warpRanked
+        .take(eliteTotal - privateElites)
+        .map((f) => f.genome)
+        .toList();
+    final verbatimElites = privateRanked
+        .take(privateElites)
+        .map((f) => f.genome)
+        .cast<GenomeVerbatim>()
+        .toList();
+
+    // Архив славы входит в EDA только WARP-модели. Приватное размножение
+    // работают над тремя безопасными локусами и не знают полной частотной модели.
     final eda = <String, MapEntry<Genome, double>>{};
     void feedEda(Genome genome, double weight) {
       final previous = eda[genome.key];
@@ -423,11 +477,11 @@ class EvolutionEngine {
       );
     }
 
-    for (var i = 0; i < elites.length; i++) {
-      feedEda(elites[i], 1.0 / (1.0 + i));
+    for (var i = 0; i < warpElites.length; i++) {
+      feedEda(warpElites[i], 1.0 / (1.0 + i));
     }
-    for (final genome in hofGenomes) {
-      feedEda(genome, 0.25);
+    for (final f in hallOfFame) {
+      if (!f.genome.isVerbatim) feedEda(f.genome, 0.25);
     }
     final model = AlleleModel.fit(
       [for (final e in eda.values) e.key],
@@ -435,8 +489,11 @@ class EvolutionEngine {
       weighting: [for (final e in eda.values) e.value],
       countries: settings.countries,
     );
-    final div = diversity(elites);
-    var immigrants =
+    final div = max(
+      diversity(warpElites),
+      diversity(verbatimElites),
+    );
+    final immigrants =
         immigrantCount(settings.populationSize, div, settings.immigrantFraction);
     if (div < 0.12) {
       _note(
@@ -444,55 +501,85 @@ class EvolutionEngine {
         'популяция схлопывается, иммигрантов добавлено ×2',
       );
     }
-    final out = <Genome>[];
+    final privateImmigrants = _privateSlots == 0
+        ? 0
+        : _privateSlots == settings.populationSize
+            ? immigrants
+            : (immigrants * _privateSlots / settings.populationSize).round();
+    final warpTarget = settings.populationSize - _privateSlots;
+    final warpOut = <Genome>[];
+    final privateOut = <GenomeVerbatim>[];
     final seen = <String>{};
-    void add(Genome g) {
-      if (out.length >= settings.populationSize || !seen.add(g.key)) return;
-      out.add(g);
+    void addWarp(Genome g) {
+      if (warpOut.length >= warpTarget || !seen.add(g.key)) return;
+      warpOut.add(g);
     }
 
-    // Стабильная элита: лучший кандидат обязан остаться в выборке — иначе
-    // прогон может потерять найденное из-за одной неудачной кампании.
-    for (final e in elites) {
-      add(e);
+    void addPrivate(GenomeVerbatim g) {
+      if (privateOut.length >= _privateSlots || !seen.add(g.key)) return;
+      privateOut.add(g);
     }
-    final childSlots = settings.populationSize - immigrants;
+
+    for (final e in warpElites) {
+      addWarp(e);
+    }
+    for (final e in verbatimElites) {
+      addPrivate(e);
+    }
+    final warpChildSlots = warpTarget - (immigrants - privateImmigrants);
     var guard = 0;
-    while (out.length < childSlots && guard < 300) {
+    while (warpOut.length < warpChildSlots && guard < 300) {
       guard++;
       final child = settings.useEda
           ? model.sample(rng, pools, countries: settings.countries)
           : uniformCrossover(
-              elites[rng.nextInt(elites.length)],
-              elites[rng.nextInt(elites.length)],
+              warpElites[rng.nextInt(warpElites.length)],
+              warpElites[rng.nextInt(warpElites.length)],
               rng,
             );
-      add(mutate(child, pools, rng,
+      addWarp(mutate(child, pools, rng,
           mutationRate: settings.mutationRate, countries: settings.countries));
     }
     guard = 0;
-    while (out.length < settings.populationSize && guard < 300) {
+    while (privateOut.length < _privateSlots - privateImmigrants && guard < 300) {
       guard++;
-      // Резерв посева первее случайного иммигранта: узел, который УЖЕ
-      // соединялся, ценнее слепой выборки из пула.
-      final g = _reserve.isNotEmpty
-          ? _reserve.removeAt(0)
-          : pools.random(rng, countries: settings.countries);
-      add(g);
+      final parent = verbatimElites.isEmpty
+          ? _privateSeeds
+          : verbatimElites;
+      if (parent.isEmpty) break;
+      final source = parent[rng.nextInt(parent.length)];
+      addPrivate(mutateVerbatim(source, pools, rng,
+          mutationRate: settings.mutationRate,
+          countries: settings.countries));
     }
-    // Диверсификационный floor (предложение): пока разнообразие популяции ниже
-    // порога, набираем иммигрантов — без этого элита может всех поглотить, и
-    // прогон похоронит себя через 2–3 поколения бюджета.
     guard = 0;
-    while (out.length < settings.populationSize &&
-        diversity(out) < 0.12 &&
+    while (warpOut.length < warpTarget && guard < 300) {
+      guard++;
+      final g = _takeReserve(false) ??
+          pools.random(rng, countries: settings.countries);
+      addWarp(g);
+    }
+    guard = 0;
+    while (privateOut.length < _privateSlots && guard < 300) {
+      guard++;
+      final g = _takeReserve(true) ?? _randomPrivate(rng, verbatimElites);
+      if (g is! GenomeVerbatim) break;
+      addPrivate(g);
+    }
+    guard = 0;
+    while (warpOut.length + privateOut.length < settings.populationSize &&
         guard < settings.populationSize) {
       guard++;
-      final before = out.length;
-      add(pools.random(rng, countries: settings.countries));
-      if (out.length == before) break;
+      final before = warpOut.length + privateOut.length;
+      if (warpOut.length < warpTarget) {
+        addWarp(pools.random(rng, countries: settings.countries));
+      } else {
+        final g = _randomPrivate(rng, verbatimElites);
+        if (g != null) addPrivate(g);
+      }
+      if (warpOut.length + privateOut.length == before) break;
     }
-    return out;
+    return [...warpOut, ...privateOut];
   }
 
   /// Долгоживущий фитнес = накопленные наблюдения (медиана RTT и голоса стран
@@ -516,15 +603,22 @@ class EvolutionEngine {
   /// [_reserve] и входит в поиск иммигрантом в следующих поколениях — то есть
   /// каждый конфиг пользователя всё равно бывает оценён, но по расписанию.
   List<Genome> _fill(List<Genome> seed, Random rng) {
-    final out = <Genome>[];
+    final warpOut = <Genome>[];
+    final privateOut = <GenomeVerbatim>[];
     final seen = <String>{};
     for (final g in seed) {
       // Адрес — единственное, без чего узел не собирается вовсе (ни WG, ни
       // MASQUE не имеют «глухого» адреса-умолчения).
       if (g.endpoint.isEmpty) continue;
       if (!seen.add(g.key)) continue;
-      if (out.length < settings.populationSize) {
-        out.add(g);
+      if (g.isVerbatim) {
+        if (privateOut.length < _privateSlots) {
+          privateOut.add(g as GenomeVerbatim);
+        } else {
+          _reserve.add(g);
+        }
+      } else if (warpOut.length < settings.populationSize - _privateSlots) {
+        warpOut.add(g);
       } else {
         _reserve.add(g);
       }
@@ -536,12 +630,52 @@ class EvolutionEngine {
       );
     }
     var guard = 0;
-    while (out.length < settings.populationSize && guard < 300) {
+    while (warpOut.length < settings.populationSize - _privateSlots &&
+        guard < 300) {
       guard++;
       final g = pools.random(rng, countries: settings.countries);
-      if (seen.add(g.key)) out.add(g);
+      if (seen.add(g.key)) warpOut.add(g);
     }
-    return out;
+    guard = 0;
+    while (privateOut.length < _privateSlots && guard < 300) {
+      guard++;
+      final g = _randomPrivate(rng, const []);
+      if (g == null || !seen.add(g.key)) continue;
+      privateOut.add(g);
+    }
+    return [...warpOut, ...privateOut];
+  }
+
+  int _privateTarget(List<Genome> seeds) {
+    final count = seeds.where((g) => g.isVerbatim).length;
+    if (count == 0 || seeds.isEmpty) return 0;
+    if (count == seeds.length) return settings.populationSize;
+    return (settings.populationSize * count / seeds.length)
+        .round()
+        .clamp(1, settings.populationSize - 1);
+  }
+
+  GenomeVerbatim? _randomPrivate(
+    Random rng,
+    List<GenomeVerbatim> preferred,
+  ) {
+    final parents = preferred.isNotEmpty
+        ? preferred
+        : (_privateSeeds.isNotEmpty ? _privateSeeds : const <GenomeVerbatim>[]);
+    if (parents.isEmpty) return null;
+    return mutateVerbatim(
+      parents[rng.nextInt(parents.length)],
+      pools,
+      rng,
+      mutationRate: 1,
+      countries: settings.countries,
+    );
+  }
+
+  Genome? _takeReserve(bool private) {
+    final i = _reserve.indexWhere((g) => g.isVerbatim == private);
+    if (i < 0) return null;
+    return _reserve.removeAt(i);
   }
 
   List<Genome> _dedupe(List<Genome> pop) {

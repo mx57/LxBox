@@ -35,6 +35,27 @@ void main() {
         fragment: true),
   ];
 
+  GenomeVerbatim privateSeed({String tag = 'own-awg'}) =>
+      GenomeVerbatim.fromBody(tag, {
+        'type': 'wireguard',
+        'tag': tag,
+        'address': ['172.16.0.2/32'],
+        'private_key': 'own-private-key',
+        'mtu': 1280,
+        'jc': 4,
+        'jmin': 40,
+        'jmax': 70,
+        'peers': [
+          {
+            'address': '203.0.113.5',
+            'port': 2408,
+            'public_key': 'own-peer-key',
+            'allowed_ips': ['0.0.0.0/0'],
+            'persistent_keepalive_interval': '25-35',
+          },
+        ],
+      })!;
+
   EvolutionSettings s({
     int population = 6,
     int generations = 1,
@@ -46,6 +67,7 @@ void main() {
     int seed = 7,
     double eliteFraction = 0.5,
     double minPassRate = 0.34,
+    bool useEda = true,
     Set<EvoTransport> transports = const {
       EvoTransport.awg,
       EvoTransport.masqueH3,
@@ -63,6 +85,7 @@ void main() {
         seed: seed,
         eliteFraction: eliteFraction,
         minPassRate: minPassRate,
+        useEda: useEda,
         transports: transports,
         immigrantFraction: 0.0,
         mutationRate: 0.0,
@@ -430,6 +453,77 @@ void main() {
         reason: 'излишек посева обязан попасть в поиск следующих поколений');
   });
 
+  test('all-private популяция не получает WARP-геномы', () async {
+    final own = privateSeed();
+    final fake = _FakeEvaluator();
+    final engine = EvolutionEngine(
+      evaluator: fake,
+      pools: pool,
+      settings: s(population: 6, generations: 2, rungs: const [1]),
+    );
+    final out = await engine.run([own]);
+
+    expect(fake.preparedFor.single, [own]);
+    expect(fake.batches.first, hasLength(6));
+    expect(fake.evaluated, isNotEmpty);
+    expect(
+      fake.evaluated.every((g) => g is GenomeVerbatim && g.tag == own.tag),
+      isTrue,
+    );
+    expect(out.error, isNull);
+    expect(out.generations, 2);
+  });
+
+  test('mixed популяция сохраняет квоты и отдельный отсев режимов', () async {
+    final own = privateSeed();
+    final fake = _FakeEvaluator();
+    final engine = EvolutionEngine(
+      evaluator: fake,
+      pools: pool,
+      settings: s(
+        population: 6,
+        generations: 2,
+        rungs: const [1, 2],
+        useEda: false,
+      ),
+    );
+    await engine.run([seeds.first, own]);
+
+    expect(fake.batches, hasLength(4));
+    for (final batchIndex in const [0, 2]) {
+      final batch = fake.genomeBatches[batchIndex];
+      expect(batch.where((g) => g.isVerbatim), hasLength(3));
+      expect(batch.where((g) => !g.isVerbatim), hasLength(3));
+    }
+    for (final batchIndex in const [1, 3]) {
+      final batch = fake.genomeBatches[batchIndex];
+      expect(batch.any((g) => g.isVerbatim), isTrue);
+      expect(batch.any((g) => !g.isVerbatim), isTrue);
+    }
+  });
+
+  test('фитнес WARP и приватных особей не смешивается', () async {
+    final own = privateSeed();
+    final fake = _FakeEvaluator(pass: (g) => !g.isVerbatim);
+    final engine = EvolutionEngine(
+      evaluator: fake,
+      pools: pool,
+      settings: s(population: 6, rungs: const [1]),
+    );
+    final out = await engine.run([seeds.first, own]);
+
+    expect(out.hallOfFame, isNotEmpty);
+    expect(out.hallOfFame.every((f) => !f.genome.isVerbatim), isTrue);
+    expect(
+      engine.records
+          .singleWhere((r) => r.key == own.key)
+          .lifetime
+          .passRate,
+      0,
+    );
+    expect(out.stats.single.alive, 3);
+  });
+
   test('бюджет считается в HTTP-запросах, а не в вердиктах', () async {
     // Ротация источников гео (§844) делает вердикт дороже одного probeGetUrl:
     // без учёта Observation.requests «0 % проходимых» выглядел бы дешевле, чем
@@ -511,12 +605,21 @@ class _FakeEvaluator implements GenomeEvaluator {
   void Function()? beforeEvaluate;
 
   final List<List<String>> batches = [];
+  final List<List<Genome>> genomeBatches = [];
+  final List<List<Genome>> preparedFor = [];
+  final List<Genome> evaluated = [];
   final List<int> attempts = [];
   final List<String> probed = [];
   int disposes = 0;
 
   @override
   Future<String?> prepare() async => prepareReason;
+
+  @override
+  Future<String?> prepareFor(List<Genome> genomes) async {
+    preparedFor.add(List.of(genomes));
+    return prepare();
+  }
 
   @override
   Future<void> dispose() async => disposes++;
@@ -530,6 +633,8 @@ class _FakeEvaluator implements GenomeEvaluator {
     bool Function()? budgetExceeded,
   }) async {
     batches.add([for (final g in genomes) g.key]);
+    genomeBatches.add(List.of(genomes));
+    evaluated.addAll(genomes);
     this.attempts.add(attempts);
     beforeEvaluate?.call();
     if (throwOnBatch > 0 && batches.length == throwOnBatch) {

@@ -122,6 +122,8 @@ class Genome {
 
   final EvoTransport transport;
 
+  bool get isVerbatim => false;
+
   /// §740 — профиль WARP-декоя. Для MASQUE не влияет на тело.
   final AwgProfile awgProfile;
 
@@ -491,6 +493,153 @@ class Genome {
     return t is Map<String, dynamic>
         ? Map<String, dynamic>.from(t)
         : <String, dynamic>{};
+  }
+}
+
+/// Приватный WG/AWG: исходное тело сохраняется дословно, поиск меняет только
+/// MTU, keepalive и DNS. Креды и AWG3-параметры никогда не подменяются WARP.
+class GenomeVerbatim extends Genome {
+  GenomeVerbatim._({
+    required this.tag,
+    required Map<String, dynamic> baseBody,
+    required super.endpoint,
+    required super.port,
+    super.keepalive,
+    super.mtu,
+    super.dnsTag,
+  }) : _baseBody = deepCopyJson(baseBody) as Map<String, dynamic>,
+       super(transport: EvoTransport.awg);
+
+  static GenomeVerbatim? fromBody(
+    String tag,
+    Map<String, dynamic> baseBody,
+  ) {
+    if (baseBody['type'] != 'wireguard') return null;
+    final detour = baseBody['detour'];
+    if (detour != null && (detour is! String || detour.trim().isNotEmpty)) {
+      return null;
+    }
+    final addresses = baseBody['address'];
+    if (addresses is! List || addresses.isEmpty) return null;
+    final peers = (baseBody['peers'] as List?)?.cast<Map<String, dynamic>>() ??
+        const <Map<String, dynamic>>[];
+    if (peers.isEmpty) return null;
+    final endpoint = '${peers.first['address'] ?? ''}';
+    final port = (peers.first['port'] as num?)?.toInt() ?? 0;
+    if (endpoint.isEmpty || port <= 0) return null;
+    return GenomeVerbatim._(
+      tag: tag,
+      endpoint: endpoint,
+      port: port,
+      baseBody: baseBody,
+      keepalive: Genome.normalizeKeepalive(
+        peers.first['persistent_keepalive_interval'],
+        allowRange: true,
+      ),
+      mtu: (baseBody['mtu'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final String tag;
+  final Map<String, dynamic> _baseBody;
+
+  Map<String, dynamic> get baseBody =>
+      deepCopyJson(_baseBody) as Map<String, dynamic>;
+
+  @override
+  bool get isVerbatim => true;
+
+  @override
+  GeneTokens tokens() => {
+        EvoLocus.mtu: '$mtu',
+        EvoLocus.keepalive:
+            '${Genome.normalizeKeepalive(keepalive, allowRange: true)}',
+        EvoLocus.dns: dnsTag,
+      };
+
+  @override
+  String get key => 'verbatim:${tag.length}:$tag|'
+      '${tokens().entries.map((e) => '${e.key.wire}=${e.value}').join('|')}';
+
+  @override
+  GenomeVerbatim copyWith({
+    EvoTransport? transport,
+    AwgProfile? awgProfile,
+    String? endpoint,
+    int? port,
+    String? sni,
+    Object? keepalive,
+    int? mtu,
+    String? junkProto,
+    String? junkBrowser,
+    String? junkDomain,
+    int? jc,
+    int? jitterMin,
+    int? jitterMax,
+    bool? fragment,
+    bool? recordFragment,
+    int? sniCase,
+    String? dnsTag,
+  }) =>
+      GenomeVerbatim._(
+        tag: tag,
+        endpoint: this.endpoint,
+        port: this.port,
+        baseBody: _baseBody,
+        keepalive: keepalive ?? this.keepalive,
+        mtu: mtu ?? this.mtu,
+        dnsTag: dnsTag ?? this.dnsTag,
+      );
+
+  @override
+  Map<String, dynamic> applyTo(Map<String, dynamic> base) {
+    final body = deepCopyJson(_baseBody) as Map<String, dynamic>;
+    if (mtu > 0) {
+      body['mtu'] = mtu;
+    } else {
+      body.remove('mtu');
+    }
+    final ka = Genome.normalizeKeepalive(keepalive, allowRange: true);
+    final peers = (body['peers'] as List?)?.cast<Map<String, dynamic>>() ??
+        const <Map<String, dynamic>>[];
+    for (final peer in peers) {
+      if (ka == 0) {
+        peer.remove('persistent_keepalive_interval');
+      } else {
+        peer['persistent_keepalive_interval'] = ka;
+      }
+    }
+    return body;
+  }
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'key': key,
+        'mode': 'verbatim',
+        'tag': tag,
+        'endpoint': endpoint,
+        'port': port,
+        'keepalive': Genome.normalizeKeepalive(keepalive, allowRange: true),
+        'mtu': mtu,
+        'dnsTag': dnsTag,
+      };
+
+  @override
+  String get json => jsonEncode(toJson());
+
+  @override
+  String get shortLabel => 'private · $tag · $endpoint:$port';
+
+  @override
+  double distanceTo(Genome other) {
+    if (other is! GenomeVerbatim || other.tag != tag) return 1;
+    final a = tokens();
+    final b = other.tokens();
+    var diff = 0;
+    for (final locus in a.keys) {
+      if (a[locus] != b[locus]) diff++;
+    }
+    return diff / a.length;
   }
 }
 

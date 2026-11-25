@@ -149,6 +149,37 @@ Genome mutate(
   return out;
 }
 
+/// Приватный WG/AWG мутирует только безопасные локусы; остальное тело и его
+/// identity остаются дословными.
+GenomeVerbatim mutateVerbatim(
+  GenomeVerbatim g,
+  AlleleSource pools,
+  Random rng, {
+  required double mutationRate,
+  Iterable<String> countries = const [],
+}) {
+  var mtu = g.mtu;
+  var keepalive = g.keepalive;
+  var dnsTag = g.dnsTag;
+  for (final locus in const [EvoLocus.mtu, EvoLocus.keepalive, EvoLocus.dns]) {
+    if (rng.nextDouble() >= mutationRate) continue;
+    final alleles = pools.alleles(locus, countries: countries);
+    if (alleles.isEmpty) continue;
+    final value = alleles.pick(rng);
+    switch (locus) {
+      case EvoLocus.mtu:
+        mtu = int.tryParse(value) ?? 0;
+      case EvoLocus.keepalive:
+        keepalive = Genome.normalizeKeepalive(value, allowRange: true);
+      case EvoLocus.dns:
+        dnsTag = value;
+      default:
+        throw StateError('verbatim mutation reached a fixed locus');
+    }
+  }
+  return g.copyWith(mtu: mtu, keepalive: keepalive, dnsTag: dnsTag);
+}
+
 /// Равномерный кроссовер (0.5 на локус) — альтернатива EDA-семплу, когда
 /// пользователь просит «классический ГА». Возвращает ребёнка.
 Genome uniformCrossover(
