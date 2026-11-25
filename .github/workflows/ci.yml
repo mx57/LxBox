@@ -43,6 +43,11 @@ on:
         required: false
         default: ""
         type: string
+      awg3_stand:
+        description: "Also run the live AWG3 Docker handshake and HTTP stand"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -283,6 +288,11 @@ jobs:
             dart run tool/gen_test_bundles.dart
             flutter test test_bundle $(cat test_bundle/excluded.txt)
           fi
+
+  awg3-stand:
+    name: AWG3 live stand
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.awg3_stand }}
+    uses: ./.github/workflows/awg3-integration.yml
 
   # §525 — корпус публичных подписок: прогон конвейера разбора по 68 снимкам
   # реальных списков. ОТДЕЛЬНЫМ job'ом и НЕ блокирующий: красный корпус значит
