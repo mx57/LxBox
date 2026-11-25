@@ -60,6 +60,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import '../../../models/node_spec.dart';
 import '../../../models/tunnel_status.dart';
 import '../../../services/l10n/locale_controller.dart';
+import '../../../services/parser/tt_deeplink.dart' show splitHostPort;
 import '../../../services/parser/mappers/uri_pipeline.dart'
     show parseLinkViaPipeline;
 import '../../../vpn/box_vpn_client.dart';
@@ -222,6 +223,25 @@ const Map<String, String> _countryNames = {
   'NG': 'Нигерия',
   'EG': 'Египет',
   'SA': 'Саудовская Аравия',
+  'AW': 'Аруба',
+  'BB': 'Барбадос',
+  'BN': 'Бруней',
+  'BO': 'Боливия',
+  'BQ': 'Бонайре',
+  'CW': 'Кюрасао',
+  'GD': 'Гренада',
+  'GF': 'Французская Гвиана',
+  'GY': 'Гайана',
+  'KH': 'Камбоджа',
+  'LA': 'Лаос',
+  'LC': 'Сент-Люсия',
+  'MM': 'Мьянма',
+  'MV': 'Мальдивы',
+  'SR': 'Суринам',
+  'SX': 'Синт-Мартен',
+  'TJ': 'Таджикистан',
+  'TL': 'Восточный Тимор',
+  'TM': 'Туркменистан',
 };
 
 String countryName(String code) =>
@@ -230,6 +250,564 @@ String countryName(String code) =>
 /// §834 — транспорт, которым эндпоинт подтверждён. Определяет, каким узлом
 /// (WG/AWG или MASQUE h3/h2) его подтверждает гео-фаза.
 enum EndpointTransport { wg, masqueH3, masqueH2 }
+
+const kGeoPseudoCountries = {'XX', 'A1', 'A2', 'T1'};
+
+bool isPlausibleCountry(String code) {
+  if (code.length != 2) return false;
+  final cps = code.toUpperCase().codeUnits;
+  if (cps.any((c) => c < 0x41 || c > 0x5A)) return false;
+  return !kGeoPseudoCountries.contains(code.toUpperCase());
+}
+
+/// IATA-код узла Cloudflare → страна датацентра.
+const Map<String, String> kColoCountries = {
+  'ATL': 'US',
+  'AUS': 'US',
+  'BNA': 'US',
+  'BOS': 'US',
+  'BWI': 'US',
+  'CLT': 'US',
+  'CMH': 'US',
+  'CVG': 'US',
+  'DAL': 'US',
+  'DFW': 'US',
+  'DEN': 'US',
+  'DTW': 'US',
+  'EWR': 'US',
+  'FLL': 'US',
+  'GEG': 'US',
+  'HNL': 'US',
+  'IAD': 'US',
+  'ICT': 'US',
+  'IND': 'US',
+  'JFK': 'US',
+  'LAS': 'US',
+  'LAX': 'US',
+  'MCI': 'US',
+  'MEM': 'US',
+  'MHT': 'US',
+  'MIA': 'US',
+  'MKE': 'US',
+  'MSP': 'US',
+  'MSY': 'US',
+  'ORD': 'US',
+  'PDX': 'US',
+  'PHL': 'US',
+  'PHX': 'US',
+  'RDU': 'US',
+  'SAT': 'US',
+  'SEA': 'US',
+  'SJC': 'US',
+  'SLC': 'US',
+  'SMF': 'US',
+  'SRQ': 'US',
+  'TPA': 'US',
+  'TUS': 'US',
+  'XNA': 'US',
+  'ANC': 'US',
+  'ITO': 'US',
+  'KOA': 'US',
+  'GUM': 'GU',
+  'GUA': 'GT',
+  'KIN': 'JM',
+  'NAS': 'BS',
+  'PSE': 'PR',
+  'PTP': 'GP',
+  'PTY': 'PA',
+  'PUJ': 'DO',
+  'SAL': 'SV',
+  'SDQ': 'DO',
+  'SJO': 'CR',
+  'SJU': 'PR',
+  'TGU': 'HN',
+  'POS': 'TT',
+  'YHM': 'CA',
+  'YQB': 'CA',
+  'YUL': 'CA',
+  'YOW': 'CA',
+  'YXE': 'CA',
+  'YYC': 'CA',
+  'YYG': 'CA',
+  'YYJ': 'CA',
+  'YYT': 'CA',
+  'YYZ': 'CA',
+  'BJX': 'MX',
+  'CUN': 'MX',
+  'GDL': 'MX',
+  'MEX': 'MX',
+  'QRO': 'MX',
+  'SLP': 'MX',
+  'ASU': 'PY',
+  'BEL': 'BR',
+  'BOG': 'CO',
+  'BSB': 'BR',
+  'COR': 'AR',
+  'CWB': 'BR',
+  'EZE': 'AR',
+  'FOR': 'BR',
+  'GIG': 'BR',
+  'GRU': 'BR',
+  'GYE': 'EC',
+  'LIM': 'PE',
+  'MAO': 'BR',
+  'MDE': 'CO',
+  'MVD': 'UY',
+  'POA': 'BR',
+  'REC': 'BR',
+  'ROS': 'AR',
+  'SCL': 'CL',
+  'SSA': 'BR',
+  'UIO': 'EC',
+  'VCP': 'BR',
+  'AGP': 'ES',
+  'AMS': 'NL',
+  'ARN': 'SE',
+  'AST': 'ES',
+  'BEG': 'RS',
+  'BER': 'DE',
+  'BGO': 'NO',
+  'BHX': 'GB',
+  'BCN': 'ES',
+  'BOD': 'FR',
+  'BRS': 'GB',
+  'BRU': 'BE',
+  'BVA': 'FR',
+  'CDG': 'FR',
+  'CFU': 'GR',
+  'CPH': 'DK',
+  'CTA': 'IT',
+  'DUB': 'IE',
+  'DUS': 'DE',
+  'EDI': 'GB',
+  'FRA': 'DE',
+  'FCO': 'IT',
+  'FNC': 'PT',
+  'FUE': 'ES',
+  'GVA': 'CH',
+  'HAM': 'DE',
+  'HEL': 'FI',
+  'HER': 'GR',
+  'IBZ': 'ES',
+  'INI': 'RS',
+  'KEF': 'IS',
+  'KRK': 'PL',
+  'LCA': 'CY',
+  'LHR': 'GB',
+  'LGW': 'GB',
+  'LIS': 'PT',
+  'LIN': 'IT',
+  'LPA': 'ES',
+  'LYS': 'FR',
+  'LUX': 'LU',
+  'MAD': 'ES',
+  'MAN': 'GB',
+  'MLA': 'MT',
+  'MLP': 'IT',
+  'MRS': 'FR',
+  'MUC': 'DE',
+  'MXP': 'IT',
+  'NAP': 'IT',
+  'NCE': 'FR',
+  'NCL': 'GB',
+  'NTE': 'FR',
+  'NUE': 'DE',
+  'OPO': 'PT',
+  'OSL': 'NO',
+  'PMI': 'ES',
+  'PMO': 'IT',
+  'PRG': 'CZ',
+  'PDL': 'PT',
+  'SVG': 'NO',
+  'SVQ': 'ES',
+  'STN': 'GB',
+  'TLS': 'FR',
+  'TLN': 'FR',
+  'TRN': 'IT',
+  'VLC': 'ES',
+  'WAW': 'PL',
+  'ZAG': 'HR',
+  'ZRH': 'CH',
+  'BLE': 'SE',
+  'GOT': 'SE',
+  'MMX': 'SE',
+  'STO': 'SE',
+  'STR': 'DE',
+  'LEJ': 'DE',
+  'ATH': 'GR',
+  'SKG': 'GR',
+  'BTS': 'SK',
+  'BRQ': 'CZ',
+  'BUD': 'HU',
+  'CIY': 'IT',
+  'VRN': 'IT',
+  'DEB': 'HU',
+  'OTP': 'RO',
+  'CLJ': 'RO',
+  'SOF': 'BG',
+  'PLO': 'BG',
+  'VAR': 'BG',
+  'BOJ': 'BG',
+  'TLL': 'EE',
+  'RIX': 'LV',
+  'VNO': 'LT',
+  'MSQ': 'BY',
+  'KBP': 'UA',
+  'IEV': 'UA',
+  'DNN': 'UA',
+  'OZH': 'UA',
+  'LWO': 'UA',
+  'ODS': 'UA',
+  'HRK': 'UA',
+  'KIV': 'MD',
+  'RNV': 'MD',
+  'DME': 'RU',
+  'LED': 'RU',
+  'TBS': 'GE',
+  'EVN': 'AM',
+  'GYD': 'AZ',
+  'ALA': 'KZ',
+  'TAS': 'UZ',
+  'LJU': 'SI',
+  'SPU': 'HR',
+  'RIJ': 'HR',
+  'OSI': 'HR',
+  'TIA': 'AL',
+  'SKP': 'MK',
+  'SJJ': 'BA',
+  'OSR': 'CZ',
+  'TMP': 'FI',
+  'OUL': 'FI',
+  'GDN': 'PL',
+  'KTW': 'PL',
+  'POZ': 'PL',
+  'WRO': 'PL',
+  'BZG': 'PL',
+  'RZE': 'PL',
+  'SZZ': 'PL',
+  'AER': 'RU',
+  'GOJ': 'RU',
+  'KZN': 'RU',
+  'KRR': 'RU',
+  'ROV': 'RU',
+  'SVX': 'RU',
+  'OVB': 'RU',
+  'KJA': 'RU',
+  'UFA': 'RU',
+  'VVO': 'RU',
+  'SVO': 'RU',
+  'ADB': 'TR',
+  'AMM': 'JO',
+  'BEY': 'LB',
+  'BGW': 'IQ',
+  'CAI': 'EG',
+  'DKR': 'SN',
+  'DOH': 'QA',
+  'DWC': 'AE',
+  'DXB': 'AE',
+  'ESB': 'TR',
+  'IST': 'TR',
+  'JED': 'SA',
+  'RUH': 'SA',
+  'DMM': 'SA',
+  'KWI': 'KW',
+  'BAH': 'BH',
+  'MCT': 'OM',
+  'TLV': 'IL',
+  'ABJ': 'CI',
+  'ACC': 'GH',
+  'ADD': 'ET',
+  'ALG': 'DZ',
+  'CPT': 'ZA',
+  'EBB': 'UG',
+  'FIH': 'CD',
+  'JNB': 'ZA',
+  'DUR': 'ZA',
+  'JRO': 'TZ',
+  'KGL': 'RW',
+  'LOS': 'NG',
+  'MRU': 'MU',
+  'NBO': 'KE',
+  'RBA': 'MA',
+  'TNR': 'MG',
+  'TUN': 'TN',
+  'RUN': 'RE',
+  'AKL': 'NZ',
+  'WLG': 'NZ',
+  'CHC': 'NZ',
+  'ZQN': 'NZ',
+  'AUH': 'AE',
+  'BKK': 'TH',
+  'BLR': 'IN',
+  'BOM': 'IN',
+  'BBI': 'IN',
+  'COK': 'IN',
+  'MAA': 'IN',
+  'CCU': 'IN',
+  'CGK': 'ID',
+  'DPS': 'ID',
+  'CMB': 'LK',
+  'CNX': 'TH',
+  'DAC': 'BD',
+  'DEL': 'IN',
+  'FRU': 'KG',
+  'FUK': 'JP',
+  'KTM': 'NP',
+  'HAN': 'VN',
+  'DAD': 'VN',
+  'PQC': 'VN',
+  'SGN': 'VN',
+  'HKG': 'HK',
+  'HYD': 'IN',
+  'ICN': 'KR',
+  'ISB': 'PK',
+  'KHI': 'PK',
+  'KIX': 'JP',
+  'CTS': 'JP',
+  'NGO': 'JP',
+  'MEL': 'AU',
+  'BNE': 'AU',
+  'ADL': 'AU',
+  'CNS': 'AU',
+  'DRW': 'AU',
+  'PER': 'AU',
+  'SYD': 'AU',
+  'MFM': 'MO',
+  'MNL': 'PH',
+  'CEB': 'PH',
+  'CRK': 'PH',
+  'DVO': 'PH',
+  'NRT': 'JP',
+  'PNQ': 'IN',
+  'SIN': 'SG',
+  'SUB': 'ID',
+  'TPE': 'TW',
+  'ULN': 'MN',
+  'NQZ': 'KZ',
+  'AAL': 'DK',
+  'AAR': 'DK',
+  'ABA': 'RU',
+  'ABQ': 'US',
+  'ABZ': 'GB',
+  'AHB': 'SA',
+  'ALB': 'US',
+  'ANR': 'BE',
+  'ARH': 'RU',
+  'ASB': 'TM',
+  'AUA': 'AW',
+  'BCD': 'PH',
+  'BFS': 'GB',
+  'BGI': 'BB',
+  'BGR': 'US',
+  'BHD': 'GB',
+  'BHK': 'UZ',
+  'BLL': 'DK',
+  'BLQ': 'IT',
+  'BOH': 'GB',
+  'BOI': 'US',
+  'BON': 'BQ',
+  'BQS': 'RU',
+  'BQT': 'BY',
+  'BRI': 'IT',
+  'BSL': 'CH',
+  'BSR': 'IQ',
+  'BTK': 'RU',
+  'BTV': 'US',
+  'BUF': 'US',
+  'BUS': 'GE',
+  'BWA': 'NP',
+  'BWN': 'BN',
+  'CAG': 'IT',
+  'CAK': 'US',
+  'CAY': 'GF',
+  'CBB': 'BO',
+  'CBR': 'AU',
+  'CEK': 'RU',
+  'CGN': 'DE',
+  'CGP': 'BD',
+  'CHA': 'US',
+  'CHS': 'US',
+  'CIT': 'KZ',
+  'COS': 'US',
+  'CRP': 'US',
+  'CRZ': 'TM',
+  'CSY': 'RU',
+  'CUR': 'CW',
+  'CWC': 'UA',
+  'CWL': 'GB',
+  'CXB': 'BD',
+  'DIL': 'TL',
+  'DRS': 'DE',
+  'DSM': 'US',
+  'DYR': 'RU',
+  'DYU': 'TJ',
+  'EBL': 'IQ',
+  'ELP': 'US',
+  'ELQ': 'SA',
+  'EVV': 'US',
+  'EXT': 'GB',
+  'FAR': 'US',
+  'FAY': 'US',
+  'FEG': 'UZ',
+  'FLR': 'IT',
+  'FMO': 'DE',
+  'FWA': 'US',
+  'GEO': 'GY',
+  'GES': 'PH',
+  'GIZ': 'SA',
+  'GLA': 'GB',
+  'GME': 'BY',
+  'GND': 'GD',
+  'GOA': 'IT',
+  'GRR': 'US',
+  'GRZ': 'AT',
+  'GSO': 'US',
+  'GSP': 'US',
+  'GUW': 'KZ',
+  'HAJ': 'DE',
+  'HAS': 'SA',
+  'HBA': 'AU',
+  'HPN': 'US',
+  'HRI': 'LK',
+  'HSV': 'US',
+  'HTA': 'RU',
+  'IJK': 'RU',
+  'IKT': 'RU',
+  'ILO': 'PH',
+  'INN': 'AT',
+  'ISU': 'IQ',
+  'JAN': 'US',
+  'JAX': 'US',
+  'JSR': 'BD',
+  'KEJ': 'RU',
+  'KGF': 'KZ',
+  'KGP': 'RU',
+  'KHV': 'RU',
+  'KLF': 'RU',
+  'KLU': 'AT',
+  'KRW': 'TM',
+  'KUF': 'RU',
+  'KUT': 'GE',
+  'KVD': 'AZ',
+  'LAN': 'US',
+  'LBA': 'GB',
+  'LBD': 'TJ',
+  'LCY': 'GB',
+  'LEI': 'ES',
+  'LEX': 'US',
+  'LHE': 'PK',
+  'LIL': 'FR',
+  'LIT': 'US',
+  'LNZ': 'AT',
+  'LPB': 'BO',
+  'LPL': 'GB',
+  'LPQ': 'LA',
+  'LTN': 'GB',
+  'LWN': 'AM',
+  'MAF': 'US',
+  'MCX': 'RU',
+  'MCY': 'AU',
+  'MDL': 'MM',
+  'MED': 'SA',
+  'MFE': 'US',
+  'MLE': 'MV',
+  'MMK': 'RU',
+  'MOB': 'US',
+  'MRV': 'RU',
+  'MUX': 'PK',
+  'MVQ': 'BY',
+  'MYR': 'US',
+  'NBC': 'RU',
+  'NJF': 'IQ',
+  'NLV': 'UA',
+  'NOC': 'IE',
+  'NOZ': 'RU',
+  'NTL': 'AU',
+  'NVI': 'UZ',
+  'OGZ': 'RU',
+  'OKC': 'US',
+  'OMA': 'US',
+  'OMS': 'RU',
+  'OOL': 'AU',
+  'ORF': 'US',
+  'ORK': 'IE',
+  'OSS': 'KG',
+  'OST': 'BE',
+  'PAD': 'DE',
+  'PBM': 'SR',
+  'PEE': 'RU',
+  'PES': 'RU',
+  'PEW': 'PK',
+  'PKC': 'RU',
+  'PKR': 'NP',
+  'PLQ': 'LT',
+  'PNH': 'KH',
+  'PNS': 'US',
+  'PSA': 'IT',
+  'PVD': 'US',
+  'PWM': 'US',
+  'PWQ': 'KZ',
+  'REN': 'RU',
+  'REP': 'KH',
+  'RIC': 'US',
+  'RJH': 'BD',
+  'RNO': 'US',
+  'RNS': 'FR',
+  'ROA': 'US',
+  'ROC': 'US',
+  'SAV': 'US',
+  'SBN': 'US',
+  'SCO': 'KZ',
+  'SCQ': 'ES',
+  'SDF': 'US',
+  'SGC': 'RU',
+  'SGF': 'US',
+  'SHV': 'US',
+  'SIP': 'UA',
+  'SKD': 'UZ',
+  'SKT': 'PK',
+  'SKX': 'RU',
+  'SLL': 'OM',
+  'SNN': 'IE',
+  'SOU': 'GB',
+  'STW': 'RU',
+  'SXB': 'FR',
+  'SYR': 'US',
+  'SZG': 'AT',
+  'TAB': 'TT',
+  'TIF': 'SA',
+  'TLH': 'US',
+  'TOF': 'RU',
+  'TRD': 'NO',
+  'TSE': 'KZ',
+  'TSF': 'IT',
+  'TSV': 'AU',
+  'TUL': 'US',
+  'UGC': 'UZ',
+  'UKK': 'KZ',
+  'UMY': 'UA',
+  'URA': 'KZ',
+  'UUS': 'RU',
+  'UVF': 'LC',
+  'VCE': 'IT',
+  'VIN': 'UA',
+  'VPS': 'US',
+  'VTB': 'BY',
+  'VTE': 'LA',
+  'VVI': 'BO',
+  'XNH': 'IQ',
+  'YEG': 'CA',
+  'YHZ': 'CA',
+  'YKS': 'RU',
+  'YVR': 'CA',
+  'YWG': 'CA',
+  'ZAD': 'HR',
+  'ZAM': 'PH',
+  'ZYL': 'BD',
+};
+
+String countryFromColo(String colo) =>
+    kColoCountries[colo.toUpperCase().trim()] ?? '';
 
 /// Тело `cdn-cgi/trace` (построчные `key=value`) → (код страны, IATA-узел).
 /// Пусто/битый ответ → ('' , ''). Чистая функция — покрыта тестом.
@@ -247,10 +825,34 @@ enum EndpointTransport { wg, masqueH3, masqueH2 }
       colo = v.toUpperCase();
     }
   }
-  // trace может отдать `loc=` пустым (у CF это «неизвестно») — тогда страну
-  // считаем неопределённой.
-  if (country.length != 2) country = '';
+  if (!isPlausibleCountry(country)) country = '';
   return (country: country, colo: colo);
+}
+
+({String country, String colo}) parseCloudflareMeta(String body) {
+  Object? decoded;
+  try {
+    decoded = jsonDecode(body);
+  } catch (_) {
+    return (country: '', colo: '');
+  }
+  if (decoded is! Map) return (country: '', colo: '');
+  final country = '${decoded['country'] ?? ''}'.toUpperCase().trim();
+  final colo = '${decoded['colo'] ?? ''}'.toUpperCase().trim();
+  return (country: isPlausibleCountry(country) ? country : '', colo: colo);
+}
+
+/// Страна определяется по датацентру; `loc` — только запас без `colo`.
+({String country, String colo}) parseGeoBody(String body) {
+  final trace = parseCloudflareTrace(body);
+  final meta = parseCloudflareMeta(body);
+  final colo = trace.colo.isNotEmpty ? trace.colo : meta.colo;
+  if (colo.isNotEmpty) {
+    return (country: countryFromColo(colo), colo: colo);
+  }
+  if (trace.country.isNotEmpty) return (country: trace.country, colo: colo);
+  if (meta.country.isNotEmpty) return (country: meta.country, colo: colo);
+  return (country: '', colo: colo);
 }
 
 /// §839 — SNI для i-го MASQUE-кандидата: РОТАЦИЯ по пулу, а не всегда первый.
@@ -293,10 +895,7 @@ const kScanMasqueAttempts = 3;
 
 /// Результат серии повторов по одному узлу.
 class GeoAttemptResult {
-  const GeoAttemptResult({
-    required this.result,
-    required this.attempts,
-  });
+  const GeoAttemptResult({required this.result, required this.attempts});
 
   /// ПОСЛЕДНИЙ ответ сервера (для журнала важен он: именно его увидит
   /// разработчик). null — попыток не было.
@@ -306,13 +905,10 @@ class GeoAttemptResult {
 
 /// Движок сканера. Не хранит состояние UI; отдаёт результаты по мере готовности.
 class EndpointScanner {
-  EndpointScanner({
-    CcChannel? cc,
-    BoxVpnClient? vpn,
-    WarpClient? warpClient,
-  })  : _cc = cc ?? CcChannel.instance,
-        _vpn = vpn ?? BoxVpnClient(),
-        _injectedWarp = warpClient;
+  EndpointScanner({CcChannel? cc, BoxVpnClient? vpn, WarpClient? warpClient})
+    : _cc = cc ?? CcChannel.instance,
+      _vpn = vpn ?? BoxVpnClient(),
+      _injectedWarp = warpClient;
 
   final CcChannel _cc;
   final BoxVpnClient _vpn;
@@ -361,8 +957,7 @@ class EndpointScanner {
   /// §835 — встроенный резервный пул (asset недоступен/битый). Держит и
   /// WG-блоки, и MASQUE-хосты/блок, чтобы скан не терял второй транспорт.
   /// Структура статична и валидна → null здесь невозможен.
-  static ScanPool _fallbackScanPool() =>
-      ScanPool.fromFullJson(_fallbackJson)!;
+  static ScanPool _fallbackScanPool() => ScanPool.fromFullJson(_fallbackJson)!;
 
   static const Map<String, dynamic> _fallbackJson = {
     'wireguard': {
@@ -449,8 +1044,8 @@ class EndpointScanner {
     log?.i(
       'scan',
       'старт: адресов=${endpoints.length} потоков=$concurrency '
-      'таймаут=${timeout.inMilliseconds}мс максимум-гео=$maxGeoLookups '
-      'MASQUE-фолбэк=$tcpFallback',
+          'таймаут=${timeout.inMilliseconds}мс максимум-гео=$maxGeoLookups '
+          'MASQUE-фолбэк=$tcpFallback',
     );
 
     // §835 — самопроверка сети: на телефоне UDP наружу может быть зарезан
@@ -462,21 +1057,18 @@ class EndpointScanner {
     // h2-блок) в WG-фазу не идут: они не отвечают на WG-handshake.
     final loadedPool = await loadPool();
     final pool = loadedPool ?? _fallbackScanPool();
-    final wgPorts = <int>{
-      2408,
-      ...pool.wgPorts,
-    }.toList();
+    final wgPorts = <int>{2408, ...pool.wgPorts}.toList();
     if (loadedPool == null) {
       log?.w(
         'pool',
         'asset не прочитан → встроенный резервный пул (WG + MASQUE); '
-        'проверьте assets/warp_endpoints.json',
+            'проверьте assets/warp_endpoints.json',
       );
     } else {
       log?.i(
         'pool',
         'asset ок: wgV4=${pool.wgV4Cidr} порты=$wgPorts '
-        'masqueH3=${pool.masqueH3Hosts} masqueH2=${pool.masqueV4Cidr}',
+            'masqueH3=${pool.masqueH3Hosts} masqueH2=${pool.masqueV4Cidr}',
       );
     }
 
@@ -543,15 +1135,15 @@ class EndpointScanner {
       log?.i(
         'p1',
         'обфускация AWG: I1(${renderI1Chain(kI1DefaultChain).length}Б)'
-        '+junk(jc=6,j10..50)+init, ключ аккаунта ок (${warpPrivRaw.length}Б)',
+            '+junk(jc=6,j10..50)+init, ключ аккаунта ок (${warpPrivRaw.length}Б)',
       );
     } catch (e) {
       awgDegradedReason = 'ключ аккаунта не получен';
       log?.e(
         'p1',
         'КЛЮЧ АККАУНТА НЕ ПОЛУЧЕН ($e) → голый WG-init. На сетях, режущих '
-        'UDP, это даст 0 живых: WARP отвечает только на handshake от ключа '
-        'ЗАРЕГИСТРИРОВАННОГО пира. Проверьте интернет и повторите скан.',
+            'UDP, это даст 0 живых: WARP отвечает только на handshake от ключа '
+            'ЗАРЕГИСТРИРОВАННОГО пира. Проверьте интернет и повторите скан.',
       );
     }
 
@@ -566,22 +1158,25 @@ class EndpointScanner {
           'p1',
           '$ep → ${r.kind.name} rtt=${r.rttMs}мс ${r.detail}',
         );
-        emit(ScanEndpointStatus(
-          endpoint: ep,
-          phase: 1,
-          verdict: r.alive
-              ? (r.kind == WgProbeKind.cookie ? 'cookie' : 'alive')
-              : r.kind.name,
-          rttMs: r.rttMs,
-          detail: r.detail,
-        ));
+        emit(
+          ScanEndpointStatus(
+            endpoint: ep,
+            phase: 1,
+            verdict: r.alive
+                ? (r.kind == WgProbeKind.cookie ? 'cookie' : 'alive')
+                : r.kind.name,
+            rttMs: r.rttMs,
+            detail: r.detail,
+          ),
+        );
       }
+
       final awgMode = warpPrivRaw != null;
       log?.i(
         'p1',
         awgMode
             ? 'UDP-проба AWG-залпом (обфусцированно): ${cand.length} адресов, '
-                'порты=$ports'
+                  'порты=$ports'
             : 'UDP-проба голым WG-init: ${cand.length} адресов, порты=$ports',
       );
       final batch = await (warpPrivRaw != null
@@ -622,9 +1217,11 @@ class EndpointScanner {
         }
       }
     }
-    failed.addAll(wgCandidates.where((ip) => !alive.keys.any(
-          (a) => a == ip || a.startsWith('$ip:'),
-        )));
+    failed.addAll(
+      wgCandidates.where(
+        (ip) => !alive.keys.any((a) => a == ip || a.startsWith('$ip:')),
+      ),
+    );
     log?.i(
       'p1',
       'итог фазы 1: живых=${alive.length} без ответа=${failed.length}',
@@ -634,7 +1231,8 @@ class EndpointScanner {
     // режущей UDP, это 0 живых. Поднимаем причину в заметку под итогом скана,
     // чтобы пользователь видел не только «0», но и ЧТО сломано.
     if (awgDegradedReason != null && alive.isEmpty) {
-      note = '$awgDegradedReason — проба шла без обфускации. '
+      note =
+          '$awgDegradedReason — проба шла без обфускации. '
           'Проверьте интернет и повторите скан.';
     }
 
@@ -642,7 +1240,10 @@ class EndpointScanner {
     // Открытый TCP 443 НЕ считаем живостью (CF-edge отвечает почти всегда):
     // кандидаты MASQUE подтверждаются реальным GET через probe-сессию ниже.
     var usedMasque = false;
-    if (tcpFallback && !_cancelled && alive.isEmpty && masqueCandidates.isNotEmpty) {
+    if (tcpFallback &&
+        !_cancelled &&
+        alive.isEmpty &&
+        masqueCandidates.isNotEmpty) {
       usedMasque = true;
       log?.w('p1b', 'UDP не дал живых → идём MASQUE-путём (h2/TCP 443)');
     }
@@ -655,14 +1256,16 @@ class EndpointScanner {
     ];
     // Сначала самые «перспективные» (WG-ответ прошёл быстрее) — по RTT.
     final orderedSorted = [...ordered]
-      ..sort((a, b) =>
-          (alive[a]?.rttMs ?? 1 << 30).compareTo(alive[b]?.rttMs ?? 1 << 30));
+      ..sort(
+        (a, b) =>
+            (alive[a]?.rttMs ?? 1 << 30).compareTo(alive[b]?.rttMs ?? 1 << 30),
+      );
     final geoList = orderedSorted.take(maxGeoLookups).toList();
 
     log?.i(
       'p2',
       'фаза 2 (гео через ядро): кандидатов=${geoList.length} '
-      'из ${ordered.length} (лимит $maxGeoLookups)',
+          'из ${ordered.length} (лимит $maxGeoLookups)',
     );
 
     // ── §838 — TCP-preflight MASQUE-h2 ────────────────────────────────────
@@ -688,23 +1291,30 @@ class EndpointScanner {
           'p2',
           'TCP-preflight MASQUE-h2: ${h2.length} адресов, порты=$ports',
         );
-        final probes = await Future.wait(h2.map((ep) async {
-          final ip = ep.contains(':') ? ep.split(':').first : ep;
-          for (final p in ports) {
-            // §839 — отмена должна прерывать и preflight: иначе «Отмена»
-            // ждёт все таймауты (до 7 портов × 3с) по всем адресам.
-            if (_cancelled) {
-              return (ep: ep, ip: ip, port: 0, detail: 'отменено');
+        final probes = await Future.wait(
+          h2.map((ep) async {
+            final ip = ep.contains(':') ? ep.split(':').first : ep;
+            for (final p in ports) {
+              // §839 — отмена должна прерывать и preflight: иначе «Отмена»
+              // ждёт все таймауты (до 7 портов × 3с) по всем адресам.
+              if (_cancelled) {
+                return (ep: ep, ip: ip, port: 0, detail: 'отменено');
+              }
+              final r = await probeTcpOpen(
+                ip,
+                p,
+                timeout: const Duration(seconds: 3),
+              );
+              if (r.open) return (ep: ep, ip: ip, port: p, detail: r.detail);
             }
-            final r = await probeTcpOpen(
-              ip,
-              p,
-              timeout: const Duration(seconds: 3),
+            return (
+              ep: ep,
+              ip: ip,
+              port: 0,
+              detail: 'tcp: порты $ports закрыты',
             );
-            if (r.open) return (ep: ep, ip: ip, port: p, detail: r.detail);
-          }
-          return (ep: ep, ip: ip, port: 0, detail: 'tcp: порты $ports закрыты');
-        }));
+          }),
+        );
         for (final r in probes) {
           if (_cancelled) break;
           if (r.port == 0) {
@@ -719,12 +1329,14 @@ class EndpointScanner {
               'p2',
               '${r.ep} ${r.detail} → fallback на MASQUE-h3 (QUIC/UDP:443)',
             );
-            emit(ScanEndpointStatus(
-              endpoint: r.ep,
-              phase: 2,
-              verdict: 'tcp-closed',
-              detail: '${r.detail} → пробую h3/QUIC',
-            ));
+            emit(
+              ScanEndpointStatus(
+                endpoint: r.ep,
+                phase: 2,
+                verdict: 'tcp-closed',
+                detail: '${r.detail} → пробую h3/QUIC',
+              ),
+            );
             continue;
           }
           final key = '${r.ip}:${r.port}';
@@ -754,7 +1366,7 @@ class EndpointScanner {
         log?.i(
           'p2',
           'после preflight: к подтверждению ${effective.length} '
-          'из ${geoList.length}',
+              'из ${geoList.length}',
         );
       }
     }
@@ -768,23 +1380,27 @@ class EndpointScanner {
           onProgress: onProgressPhase2,
           log: log,
           onGeo: (ep, meta, detail) {
-            emit(ScanEndpointStatus(
-              endpoint: ep,
-              phase: 2,
-              verdict: meta != null ? 'geo-ok' : 'geo-fail',
-              rttMs: alive[ep]?.rttMs ?? 0,
-              country: meta?.country ?? '',
-              colo: meta?.colo ?? '',
-              detail: detail,
-            ));
+            emit(
+              ScanEndpointStatus(
+                endpoint: ep,
+                phase: 2,
+                verdict: meta != null ? 'geo-ok' : 'geo-fail',
+                rttMs: alive[ep]?.rttMs ?? 0,
+                country: meta?.country ?? '',
+                colo: meta?.colo ?? '',
+                detail: detail,
+              ),
+            );
           },
         );
         geoMeta.addAll(res.meta);
         // MASQUE-кандидаты, прошедшие GET, становятся живыми эндпоинтами.
         for (final ep in effective) {
           if (res.meta.containsKey(ep) && !alive.containsKey(ep)) {
-            alive[ep] = const WgProbeResult(WgProbeKind.response,
-                rttMs: 0); // подтверждён probe-GET (MASQUE)
+            alive[ep] = const WgProbeResult(
+              WgProbeKind.response,
+              rttMs: 0,
+            ); // подтверждён probe-GET (MASQUE)
             aliveTransport[ep] = byTransport[ep] ?? EndpointTransport.masqueH3;
           }
         }
@@ -819,23 +1435,24 @@ class EndpointScanner {
       byCountry.putIfAbsent(country, () => []).add(r);
     }
 
-    final groups = [
-      for (final e in byCountry.entries)
-        EndpointCountryGroup(
-          code: e.key,
-          name: countryName(e.key),
-          endpoints: e.value,
-        ),
-    ]..sort((a, b) {
-        // Известные страны — выше; «не определена» — в конце.
-        if (a.isUnknown != b.isUnknown) return a.isUnknown ? 1 : -1;
-        return b.valid.compareTo(a.valid);
-      });
+    final groups =
+        [
+          for (final e in byCountry.entries)
+            EndpointCountryGroup(
+              code: e.key,
+              name: countryName(e.key),
+              endpoints: e.value,
+            ),
+        ]..sort((a, b) {
+          // Известные страны — выше; «не определена» — в конце.
+          if (a.isUnknown != b.isUnknown) return a.isUnknown ? 1 : -1;
+          return b.valid.compareTo(a.valid);
+        });
 
     log?.i(
       'done',
       'финиш: групп=${groups.length} живых=${alive.length} '
-      'без ответа=${failed.length} за ${sw.elapsedMilliseconds}мс',
+          'без ответа=${failed.length} за ${sw.elapsedMilliseconds}мс',
     );
 
     return EndpointScanResult(
@@ -880,7 +1497,8 @@ class EndpointScanner {
     // В сетях, режущих UDP (РФ), рабочий транспорт — h2 (TCP): h3 — это QUIC
     // поверх UDP. Поэтому адрес, живущий и в h2-блоке (не из exclude), ведём
     // как h2; на h3 остаются только h3-only хосты.
-    final inH2 = _ipInCidrs(host, pool.masqueV4Cidr) &&
+    final inH2 =
+        _ipInCidrs(host, pool.masqueV4Cidr) &&
         !pool.masqueH2Exclude.contains(host);
     return inH2 ? EndpointTransport.masqueH2 : EndpointTransport.masqueH3;
   }
@@ -888,11 +1506,8 @@ class EndpointScanner {
   /// Подтверждение + гео через probe-сессию. Возвращает карту `endpoint →
   /// (страна, узел)` по тем, через кого GET прошёл; эндпоинты, не прошедшие
   /// пробу, в карту не попадают.
-  Future<
-      ({
-        Map<String, ({String country, String colo})> meta,
-        String? error,
-      })> _probeGeo(
+  Future<({Map<String, ({String country, String colo})> meta, String? error})>
+  _probeGeo(
     List<String> eps, {
     required Map<String, EndpointTransport> byTransport,
     required ScanPool? pool,
@@ -902,7 +1517,8 @@ class EndpointScanner {
       String endpoint,
       ({String country, String colo})? meta,
       String detail,
-    )? onGeo,
+    )?
+    onGeo,
   }) async {
     final out = <String, ({String country, String colo})>{};
     if (eps.isEmpty) return (meta: out, error: null);
@@ -916,7 +1532,7 @@ class EndpointScanner {
         log?.w(
           'p2',
           'VPN включён → probe-сессию поднять нельзя, гео пропущено. '
-          'Выключите VPN и перезапустите скан.',
+              'Выключите VPN и перезапустите скан.',
         );
         return (
           meta: out,
@@ -941,10 +1557,13 @@ class EndpointScanner {
       log?.i(
         'p2',
         'аккаунты: WARP=${warpAcc != null ? 'есть' : 'нет'} '
-        'MASQUE=${masqueAcc != null ? 'есть' : 'нет'}',
+            'MASQUE=${masqueAcc != null ? 'есть' : 'нет'}',
       );
-      if (eps.any((e) => (byTransport[e] ?? EndpointTransport.wg) ==
-              EndpointTransport.wg) &&
+      if (eps.any(
+            (e) =>
+                (byTransport[e] ?? EndpointTransport.wg) ==
+                EndpointTransport.wg,
+          ) &&
           warpAcc == null) {
         try {
           log?.i('p2', 'регистрирую WARP-аккаунт…');
@@ -959,8 +1578,11 @@ class EndpointScanner {
           log?.e('p2', 'WARP register failed: $e');
         }
       }
-      if (eps.any((e) => (byTransport[e] ?? EndpointTransport.wg) !=
-              EndpointTransport.wg) &&
+      if (eps.any(
+            (e) =>
+                (byTransport[e] ?? EndpointTransport.wg) !=
+                EndpointTransport.wg,
+          ) &&
           masqueAcc == null) {
         try {
           log?.i('p2', 'регистрирую MASQUE-аккаунт…');
@@ -997,7 +1619,8 @@ class EndpointScanner {
       final sniPool = isWg
           ? (pool?.wgSniPool ?? const <String>[])
           : (pool?.masqueSniPool ?? const <String>[]);
-      final sni = isWg ? (sniPool.isEmpty ? '' : sniPool.first)
+      final sni = isWg
+          ? (sniPool.isEmpty ? '' : sniPool.first)
           : rotateMasqueSni(sniPool, i);
       final node = _buildNodeFor(ep, transport, builder, pool, sni);
       if (node == null) {
@@ -1024,7 +1647,7 @@ class EndpointScanner {
     log?.i(
       'p2',
       'probe-конфигов=${batches.length} ядро=$coreVersion '
-      'собрано узлов=${nodes.whereType<NodeSpec>().length}/${eps.length}',
+          'собрано узлов=${nodes.whereType<NodeSpec>().length}/${eps.length}',
     );
 
     var done = 0;
@@ -1037,7 +1660,7 @@ class EndpointScanner {
       log?.i(
         'p2',
         'probeStart: тегов=${cfg.tagByIndex.length} '
-        'конфиг=${cfg.configJson!.length}B битых=${cfg.brokenByIndex.length}',
+            'конфиг=${cfg.configJson!.length}B битых=${cfg.brokenByIndex.length}',
       );
       final started = await _cc.probeStart(cfg.configJson!);
       final err = started.error;
@@ -1072,13 +1695,13 @@ class EndpointScanner {
             final r = last!;
             final parsed = probeGeoAttempt(r);
             if (parsed.ok) {
-              final geo = parseCloudflareTrace(parsed.content);
+              final geo = parseGeoBody(parsed.content);
               out[ep] = geo;
               log?.i(
                 'p2',
                 '$ep GET ${r.status} loc=${geo.country} colo=${geo.colo} '
-                'remote=${r.remoteAddr} ${r.elapsedMs}мс'
-                '${first ? '' : ' (попытка $attempt из $kScanMasqueAttempts)'}',
+                    'remote=${r.remoteAddr} ${r.elapsedMs}мс'
+                    '${first ? '' : ' (попытка $attempt из $kScanMasqueAttempts)'}',
               );
               onGeo?.call(ep, geo, 'HTTP ${r.status} ${r.remoteAddr}');
             } else {
@@ -1088,7 +1711,7 @@ class EndpointScanner {
               log?.w(
                 'p2',
                 '$ep GET не дал гео за $attempt/$kScanMasqueAttempts попыток: '
-                '$why remote=${r.remoteAddr}',
+                    '$why remote=${r.remoteAddr}',
               );
               onGeo?.call(ep, null, why);
             }
@@ -1118,10 +1741,7 @@ class EndpointScanner {
     ScanPool? pool,
     String sni,
   ) {
-    final parts = ep.split(':');
-    final ip = parts[0];
-    final explicitPort =
-        parts.length > 1 ? int.tryParse(parts[1]) : null;
+    final (ip, explicitPort) = splitHostPort(ep);
     switch (transport) {
       case EndpointTransport.wg:
         final c = ScanCandidate(
@@ -1139,7 +1759,8 @@ class EndpointScanner {
         final ports = isH3 ? pool?.masquePortsH3 : pool?.masquePortsH2;
         final c = ScanCandidate(
           ip: ip,
-          port: explicitPort ??
+          port:
+              explicitPort ??
               ((ports?.isNotEmpty ?? false) ? ports!.first : 443),
           protocol: isH3 ? ScanProtocol.masqueH3 : ScanProtocol.masqueH2,
           sni: sni,
@@ -1179,7 +1800,8 @@ List<String> _toSlash24(String cidr) {
   if (mask >= 24) return [cidr];
   final parts = cidr.substring(0, slash).split('.').map(int.tryParse).toList();
   if (parts.length != 4 || parts.any((p) => p == null)) return const [];
-  final base = (parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!;
+  final base =
+      (parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!;
   final mask24 = 24;
   final hostBits = mask24 - mask;
   final count = 1 << hostBits;

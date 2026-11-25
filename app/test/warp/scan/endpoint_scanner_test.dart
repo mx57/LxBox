@@ -24,11 +24,44 @@ void main() {
     expect(countryName('RU'), 'Россия');
     expect(countryName(''), '');
     expect(countryName('zz'), 'ZZ');
+    const restored = {
+      'AW': 'Аруба',
+      'BB': 'Барбадос',
+      'BN': 'Бруней',
+      'BO': 'Боливия',
+      'BQ': 'Бонайре',
+      'CW': 'Кюрасао',
+      'GD': 'Гренада',
+      'GF': 'Французская Гвиана',
+      'GY': 'Гайана',
+      'KH': 'Камбоджа',
+      'LA': 'Лаос',
+      'LC': 'Сент-Люсия',
+      'MM': 'Мьянма',
+      'MV': 'Мальдивы',
+      'SR': 'Суринам',
+      'SX': 'Синт-Мартен',
+      'TJ': 'Таджикистан',
+      'TL': 'Восточный Тимор',
+      'TM': 'Туркменистан',
+    };
+    for (final entry in restored.entries) {
+      expect(countryName(entry.key), entry.value, reason: entry.key);
+    }
+  });
+
+  test('colo country map covers the expanded Cloudflare set', () {
+    expect(kColoCountries.length, greaterThanOrEqualTo(500));
+    expect(countryFromColo('FRA'), 'DE');
+    expect(countryFromColo(' fra '), 'DE');
+    expect(countryFromColo('LED'), 'RU');
+    expect(countryFromColo('ZZZ'), '');
   });
 
   group('parseCloudflareTrace', () {
     test('extracts loc and colo (uppercased)', () {
-      const body = 'fl=123abc\n'
+      const body =
+          'fl=123abc\n'
           'h=1.1.1.1\n'
           'ip=203.0.113.7\n'
           'loc=DE\n'
@@ -56,6 +89,40 @@ void main() {
       final r = parseCloudflareTrace('');
       expect(r.country, '');
       expect(r.colo, '');
+    });
+
+    test('GeoIP pseudo-codes and malformed countries are rejected', () {
+      for (final code in ['T1', 'A1', 'XX', 'D', '123', 'D\u0415']) {
+        final r = parseCloudflareTrace('loc=$code\ncolo=FRA\n');
+        expect(r.country, '', reason: code);
+        expect(r.colo, 'FRA');
+      }
+    });
+  });
+
+  group('parseGeoBody', () {
+    test('colo identifies the datacenter instead of the client loc', () {
+      final trace = parseGeoBody('loc=RU\ncolo=FRA\n');
+      expect(trace.country, 'DE');
+      expect(trace.colo, 'FRA');
+
+      final unknownColo = parseGeoBody('loc=RU\ncolo=ZZZ\n');
+      expect(unknownColo.country, '');
+      expect(unknownColo.colo, 'ZZZ');
+    });
+
+    test('loc remains a fallback only when colo is absent', () {
+      expect(parseGeoBody('loc=DE\n'), (country: 'DE', colo: ''));
+      expect(parseGeoBody('loc=T1\ncolo=LED\n'), (country: 'RU', colo: 'LED'));
+    });
+
+    test('Cloudflare meta JSON and malformed bodies are tolerated', () {
+      expect(parseGeoBody('{"country":"nl","colo":"ams"}'), (
+        country: 'NL',
+        colo: 'AMS',
+      ));
+      expect(parseGeoBody('<html>blocked</html>'), (country: '', colo: ''));
+      expect(parseGeoBody('[]'), (country: '', colo: ''));
     });
   });
 
@@ -138,7 +205,8 @@ void main() {
     );
     expect(unknown.isUnknown, isTrue);
     expect(known.isUnknown, isFalse);
-    final sorted = [unknown, known]..sort((a, b) {
+    final sorted = [unknown, known]
+      ..sort((a, b) {
         if (a.isUnknown != b.isUnknown) return a.isUnknown ? 1 : -1;
         return b.valid.compareTo(a.valid);
       });
@@ -152,47 +220,47 @@ void main() {
     expect(classifyWgResponse([3, ...List.filled(63, 0)]).alive, isTrue);
   });
 
-  test(
-    'фаза 2 строит рабочий probe-конфиг ядра под конкретный эндпоинт '
-    '(это и есть суть фикса: без сессии страна/valid были пусты)',
-    () {
-      const acc = WarpAccount(
-        privKey: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaA=',
-        peerPub: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbA=',
-        clientV4: '172.16.0.2/32',
-        clientV6: '',
-        clientId: 'AAAA',
-        accountId: 'acc',
-        deviceId: 'dev',
-        token: 'tok',
-        endpoint: 'engage.cloudflareclient.com:2408',
-        createdAt: '2026-01-01T00:00:00Z',
-      );
-      final builder = ScanNodeBuilder(warp: acc);
+  test('фаза 2 строит рабочий probe-конфиг ядра под конкретный эндпоинт '
+      '(это и есть суть фикса: без сессии страна/valid были пусты)', () {
+    const acc = WarpAccount(
+      privKey: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaA=',
+      peerPub: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbA=',
+      clientV4: '172.16.0.2/32',
+      clientV6: '',
+      clientId: 'AAAA',
+      accountId: 'acc',
+      deviceId: 'dev',
+      token: 'tok',
+      endpoint: 'engage.cloudflareclient.com:2408',
+      createdAt: '2026-01-01T00:00:00Z',
+    );
+    final builder = ScanNodeBuilder(warp: acc);
 
-      // Тот же путь, что у сканера: ScanCandidate → URI → parseUri → узел.
-      final candidate = const ScanCandidate(
-        ip: '162.159.192.7',
-        port: 2408,
-        protocol: ScanProtocol.awg,
-        sni: 'www.google.com',
-        awgParams: AwgParams(ip: 'quic', jc: 4, jmin: 40, jmax: 70),
-      );
-      final uri = builder.uriFor(candidate);
-      expect(uri, isNotNull);
-      final node = parseLinkViaPipeline(uri!);
-      expect(node, isA<WireguardSpec>());
+    // Тот же путь, что у сканера: ScanCandidate → URI → parseUri → узел.
+    final candidate = const ScanCandidate(
+      ip: '162.159.192.7',
+      port: 2408,
+      protocol: ScanProtocol.awg,
+      sni: 'www.google.com',
+      awgParams: AwgParams(ip: 'quic', jc: 4, jmin: 40, jmax: 70),
+    );
+    final uri = builder.uriFor(candidate);
+    expect(uri, isNotNull);
+    final node = parseLinkViaPipeline(uri!);
+    expect(node, isA<WireguardSpec>());
 
-      // Узел собирается в probe-конфиг с реальным тегом (не фиктивным
-      // `ep_<addr>`) — именно его зовёт probeGetUrl.
-      final cfg = buildProbeConfig([node]);
-      expect(cfg.configJson, isNotNull);
-      expect(cfg.tagByIndex[0], isNotNull);
-      expect(cfg.tagByIndex[0], isNot(contains('162.159.192.7')),
-          reason: 'тег ядра — из allocate(), а не адрес');
-      final decoded = cfg.configJson!;
-      expect(decoded, contains('162.159.192.7'));
-      expect(decoded, contains('endpoints'));
-    },
-  );
+    // Узел собирается в probe-конфиг с реальным тегом (не фиктивным
+    // `ep_<addr>`) — именно его зовёт probeGetUrl.
+    final cfg = buildProbeConfig([node]);
+    expect(cfg.configJson, isNotNull);
+    expect(cfg.tagByIndex[0], isNotNull);
+    expect(
+      cfg.tagByIndex[0],
+      isNot(contains('162.159.192.7')),
+      reason: 'тег ядра — из allocate(), а не адрес',
+    );
+    final decoded = cfg.configJson!;
+    expect(decoded, contains('162.159.192.7'));
+    expect(decoded, contains('endpoints'));
+  });
 }
