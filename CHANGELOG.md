@@ -8,6 +8,15 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Endpoint scanning keeps Cloudflare locations and parses IPv6 safely ([task 741](docs/spec/tasks/741-evolution-audit-phases-0-2.md)).** The scanner again identifies Cloudflare colos and countries, prefers the colo over the client location, filters pseudo-countries and splits bracketed IPv6 endpoints without corrupting the port. Applied bootstrap patches were removed from the repository.
+  (RU: сканер снова определяет colo и страну Cloudflare, предпочитает colo клиентской локации, отфильтровывает псевдостраны и безопасно разбирает IPv6-адреса в скобках; применённые bootstrap-патчи удалены из репозитория.)
+- **Evolution no longer rebuilds private WG/AWG nodes with WARP accounts ([task 741](docs/spec/tasks/741-evolution-audit-phases-0-2.md)).** WireGuard seeds are checked against the loaded WARP endpoint pool; if the pool is unavailable, the screen says that private configs may still be included. AWG3 keepalive ranges such as `25-35` now survive seeding, genome identity, JSON and export, while MASQUE keeps numeric keepalive only.
+  (RU: эволюция больше не пересобирает приватные WG/AWG-узлы с WARP-аккаунтами: адреса проверяются по загруженному пулу WARP, а при недоступном пуле экран прямо предупреждает о возможных приватных конфигах. Диапазоны AWG3 вроде `25-35` сохраняются от посева до экспорта; MASQUE принимает только числовой keepalive.)
+- **Evolution stops at the request budget and keeps genome patches valid ([task 741](docs/spec/tasks/741-evolution-audit-phases-0-2.md)).** Request costs are counted as observations arrive, unprobed candidates keep their positions and receive `budget exhausted`, and synthetic diagnostics no longer spend HTTP budget. Empty masquerade genes inherit the builder's values, explicit `i1` blocks `ip/id/ib`, invalid saved rung lists fall back to `[1, 2, 3]`, and an evaluator exception marks the rung as a technical failure instead of aborting the campaign.
+  (RU: эволюция останавливается по бюджету запросов и сохраняет корректные patches генома: стоимость учитывается сразу, непробованные кандидаты не теряют позиции и получают `budget exhausted`, а служебные метки не тратят HTTP-бюджет. Пустые masquerade-гены наследуют значения билдера, явный `i1` блокирует `ip/id/ib`, пустой список рангов заменяется на `[1, 2, 3]`, исключение оценщика помечает ранг техническим сбоем вместо остановки кампании.)
+
 ## [2.25.22] — 2026-11-16
 
 ### Changed

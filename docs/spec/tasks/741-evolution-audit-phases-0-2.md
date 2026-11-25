@@ -2,10 +2,10 @@
 
 | Field | Value |
 |-------|-------|
-| Status | In progress |
+| Status | Completed |
 | Start date | 2026-11-25 |
-| End date | — |
-| Commits | — |
+| End date | 2026-11-25 |
+| Commits | `963a7443`, `589fb4f1`, `bdc60d91`, `dde98cf8`, `020f325c`, `fa1a9e05` |
 | Related specs | [`740-warp-awg-profiles.md`](740-warp-awg-profiles.md), external audit `GLM_20261125_022835.md` |
 
 ## Problem
@@ -67,12 +67,13 @@ corrupt a probe body or exceed the request budget.
 - `.github/patches/evolution-849-patch.b64.*`
 - `app/lib/services/warp/scan/endpoint_scanner.dart`
 - `app/lib/services/warp/scan/scan_pool.dart`
-- `app/lib/services/evolution/{seeds,genome,settings,engine,probe_evaluator}.dart`
+- `app/lib/services/evolution/{seeds,genome,settings,engine,probe_evaluator,objectives}.dart`
 - `app/lib/screens/evolution_screen.dart`
 - `app/assets/l10n/{en,ru,zh}/ui.json`
 - `app/test/warp/scan/endpoint_scanner_test.dart`
 - `app/test/warp/scan/scan_pool_test.dart`
-- `app/test/warp/evolution/{seeds,genome,settings,engine}_test.dart`
+- `app/test/warp/evolution/{seeds,genome,settings,engine,objectives}_test.dart`
+- `CHANGELOG.md`
 
 ## Risks and edge cases
 
@@ -89,13 +90,16 @@ corrupt a probe body or exceed the request budget.
 
 ## Verification
 
-- Focused scanner, scan-pool and evolution tests pass.
-- Full `flutter analyze --no-pub` reports no new issues.
-- New negative and positive tests cover private/WARP seeds, ranged keepalive,
-  empty masquerade inheritance, explicit `i1`, empty rung settings and mid-rung
-  budget stopping.
-- Relevant l10n/hardcoded checks report zero failures and warnings.
-- CI is not pushed by this task; the branch remains local for review.
+- [x] Phase 0 scanner restoration: 14 focused tests passed.
+- [x] Phase 1.1 seed filtering: 41 focused tests passed; strict l10n, template,
+  hardcoded-string and Kotlin checks reported 0 failures and 0 warnings.
+- [x] Phases 1.2 and 2: `flutter test --no-pub test/warp/evolution` passed
+  151/151 tests, including mid-rung budget stopping, candidate positions,
+  partial evaluator failure, empty rung settings, masquerade inheritance and
+  explicit `i1`.
+- [x] Full `flutter analyze --no-pub`: 0 issues.
+- [x] No contract, lock-file or unrelated formatting changes are included.
+- [x] The branch remains local for review; no CI push or merge was performed.
 
 ## Unresolved / follow-up
 
