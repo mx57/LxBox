@@ -75,6 +75,8 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
   final BoxVpnClient _vpn;
   final WarpClient? _warp;
 
+  String get coreVersion => _coreVersion;
+
   ScanNodeBuilder? _builder;
   String _coreVersion = '';
   Map<String, String> _vars = const {};

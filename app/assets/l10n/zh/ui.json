@@ -4331,6 +4331,9 @@
   "Share failed: %s": {
     "value": "分享失败：%s"
   },
+  "Share run report": {
+    "value": "分享运行报告"
+  },
   "Share the OOM report": {
     "value": "分享 OOM 报告"
   },

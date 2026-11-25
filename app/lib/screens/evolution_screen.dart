@@ -38,6 +38,7 @@ import '../services/evolution/hall_of_fame.dart';
 import '../services/evolution/objectives.dart';
 import '../services/evolution/pools.dart';
 import '../services/evolution/probe_evaluator.dart';
+import '../services/evolution/run_report.dart';
 import '../services/evolution/seeds.dart';
 import '../services/evolution/settings.dart';
 import '../services/format_utils.dart';
@@ -95,6 +96,7 @@ class _EvolutionScreenState extends State<EvolutionScreen>
   late EvolutionHall _archive = EvolutionHall();
   List<EvolutionHallRecord> _restored = const [];
   EvolutionOutcome? _outcome;
+  EvolutionRunReport? _report;
 
   /// Фитнес ТЕКУЩЕГО поколения (ключ — [Genome.key]). Сбрасывается на первом
   /// наблюдении новой кампании — см. [_maybeRollover].
@@ -288,6 +290,11 @@ class _EvolutionScreenState extends State<EvolutionScreen>
       return;
     }
     final restored = _restoreFor(_archive, _seeds, _settings);
+    final runId = EvolutionRunReport.newRunId();
+    final candidateSalt = EvolutionRunReport.newCandidateSalt();
+    final startedAt = DateTime.now().toUtc();
+    final settings = _settings;
+    final seeds = _seeds;
     _ticker?.cancel();
     setState(() {
       _running = true;
@@ -295,6 +302,7 @@ class _EvolutionScreenState extends State<EvolutionScreen>
       _preparing = true;
       _error = null;
       _outcome = null;
+      _report = null;
       _stats = const [];
       _restored = restored;
       _records = _recordsOf(restored);
@@ -342,10 +350,27 @@ class _EvolutionScreenState extends State<EvolutionScreen>
         requestsUsed: engine.requestsUsed,
         generations: engine.stats.length,
         error: '$e',
+        cancelled: engine.cancelled,
       );
     }
     final archive = await _persistArchive(engine);
     _restored = _restoreFor(archive, _seeds, _settings);
+    final report = EvolutionRunReport.fromRun(
+      runId: runId,
+      candidateSalt: candidateSalt,
+      startedAt: startedAt,
+      finishedAt: DateTime.now().toUtc(),
+      settings: settings,
+      seedCount: seeds.genomes.length,
+      warpSeedCount: seeds.warpCount,
+      privateSeedCount: seeds.privateCount,
+      outcome: outcome,
+      records: engine.records,
+      observedVerdicts: engine.observedVerdicts,
+      paidVerdicts: engine.paidVerdicts,
+      activeTime: engine.activeTime,
+      coreVersion: _evaluator?.coreVersion ?? '',
+    );
     if (!mounted) return;
     _ticker?.cancel();
     setState(() {
@@ -353,6 +378,7 @@ class _EvolutionScreenState extends State<EvolutionScreen>
       _preparing = false;
       _paused = false;
       _outcome = outcome;
+      _report = report;
       _stats = outcome.stats;
       _hall = outcome.hallOfFame;
       _records = engine.records;
@@ -510,6 +536,18 @@ class _EvolutionScreenState extends State<EvolutionScreen>
     }
   }
 
+  Future<void> _shareReport() async {
+    final report = _report;
+    if (report == null) return;
+    try {
+      await SharePlus.instance.share(
+        ShareParams(text: report.toJsonText(), subject: 'LxBox evolution report'),
+      );
+    } catch (e) {
+      showSnack(getLocalText.s('Share failed: %s', '$e'));
+    }
+  }
+
   void _openLog() {
     showAppBottomSheet<void>(
       context: context,
@@ -658,6 +696,11 @@ class _EvolutionScreenState extends State<EvolutionScreen>
       appBar: AppBar(
         title: Text(getLocalText.s("Config evolution")),
         actions: [
+          IconButton(
+            tooltip: getLocalText.s("Share run report"),
+            onPressed: _report == null ? null : _shareReport,
+            icon: const Icon(Icons.ios_share),
+          ),
           IconButton(
             tooltip: getLocalText.s("Evolution log"),
             onPressed: _openLog,

@@ -4595,6 +4595,9 @@
   "Share failed: %s": {
     "value": "Не удалось поделиться: %s"
   },
+  "Share run report": {
+    "value": "Поделиться отчётом о прогоне"
+  },
   "Share the OOM report": {
     "value": "Поделиться отчётом OOM"
   },
