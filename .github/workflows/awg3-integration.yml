@@ -1,0 +1,62 @@
+name: AWG3 integration
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: awg3-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-stand:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable TUN
+        run: sudo modprobe tun
+
+      - name: Flutter version pin
+        id: flutter_pin
+        run: echo "version=$(tr -d '[:space:]' < android/flutter.version)" >> "$GITHUB_OUTPUT"
+
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ steps.flutter_pin.outputs.version }}
+          cache: true
+
+      - name: Dependencies
+        run: flutter pub get
+
+      - name: Prepare pinned AWG3 stand
+        run: bash ../ops/awg3/setup.sh
+
+      - name: Handshake and HTTP through the emitted AWG3 endpoint
+        env:
+          LX_AWG3_DOCKER: '1'
+        run: flutter test --no-pub --tags integration test/integration/awg3_docker_test.dart
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f ../ops/awg3/docker-compose.yml down -v --remove-orphans
+
+      - name: Upload sanitized stand log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg3-stand-log
+          path: app/build/awg3-stand/stand.log
+          if-no-files-found: warn
+          retention-days: 14
