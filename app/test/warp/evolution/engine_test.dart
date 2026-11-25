@@ -411,6 +411,104 @@ void main() {
     expect(out.hallOfFame.first.country, 'nl');
   });
 
+  test('счётчики прогноза обновляются до callback наблюдения', () async {
+    final fake = _FakeEvaluator(requestsPerProbe: 2);
+    late final EvolutionEngine engine;
+    final paidSeen = <int>[];
+    final observedSeen = <int>[];
+    engine = EvolutionEngine(
+      evaluator: fake,
+      pools: pool,
+      settings: s(rungs: const [1]),
+      onObservation: (_, _, _) {
+        paidSeen.add(engine.paidVerdicts);
+        observedSeen.add(engine.observedVerdicts);
+      },
+    );
+
+    final out = await engine.run(seeds);
+    expect(paidSeen, List.generate(6, (i) => i + 1));
+    expect(observedSeen, List.generate(6, (i) => i + 1));
+    expect(out.requestsUsed, 12);
+    expect(engine.paidVerdicts, 6);
+    expect(engine.observedVerdicts, 6);
+  });
+
+  test('возвращённые без callback наблюдения учитываются ровно один раз',
+      () async {
+    final fake = _FakeEvaluator(requestsPerProbe: 2, stream: false);
+    var callbacks = 0;
+    final engine = EvolutionEngine(
+      evaluator: fake,
+      pools: pool,
+      settings: s(rungs: const [1]),
+      onObservation: (_, _, _) => callbacks++,
+    );
+
+    final out = await engine.run(seeds);
+    expect(callbacks, 0);
+    expect(out.requestsUsed, 12);
+    expect(engine.observedVerdicts, 6);
+    expect(engine.paidVerdicts, 6);
+  });
+
+  test('бесплатная диагностика не увеличивает число платных вердиктов', () async {
+    final fake = _FakeEvaluator(requestsPerProbe: 0);
+    final engine = EvolutionEngine(
+      evaluator: fake,
+      pools: pool,
+      settings: s(rungs: const [1]),
+    );
+
+    final out = await engine.run(seeds);
+    expect(out.requestsUsed, 0);
+    expect(engine.observedVerdicts, 6);
+    expect(engine.paidVerdicts, 0);
+  });
+
+  test('разная цена проб суммируется в платных вердиктах', () async {
+    final fake = _FakeEvaluator(requestCost: (_, attempt) => attempt + 1);
+    final engine = EvolutionEngine(
+      evaluator: fake,
+      pools: pool,
+      settings: s(rungs: const [1, 2]),
+    );
+
+    final out = await engine.run(seeds);
+    expect(out.requestsUsed, 15);
+    expect(engine.observedVerdicts, 12);
+    expect(engine.paidVerdicts, 12);
+  });
+
+  test('подготовка и пауза не входят в активное время оценщика', () async {
+    final fake = _FakeEvaluator(
+      beforePrepare: () async {
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+      },
+    );
+    late final EvolutionEngine engine;
+    final wall = Stopwatch()..start();
+    engine = EvolutionEngine(
+      evaluator: fake,
+      pools: pool,
+      settings: s(rungs: const [1], generations: 2),
+      onGeneration: (summary) {
+        if (summary.index == 1) {
+          engine.pause();
+          Future<void>.delayed(const Duration(milliseconds: 30), engine.resume);
+        }
+      },
+    );
+
+    await engine.run(seeds);
+    wall.stop();
+    expect(wall.elapsed, greaterThanOrEqualTo(const Duration(milliseconds: 60)));
+    expect(
+      engine.activeTime,
+      lessThan(wall.elapsed - const Duration(milliseconds: 30)),
+    );
+  });
+
   test('посев больше популяции: первый ранг платит только за популяцию',
       () async {
     final fake = _FakeEvaluator();
@@ -752,8 +850,11 @@ class _FakeEvaluator implements GenomeEvaluator {
     this.rtt = 100,
     this.country = 'de',
     this.prepareReason,
+    this.beforePrepare,
     this.truncate = false,
+    this.stream = true,
     this.requestsPerProbe = 1,
+    this.requestCost,
     this.throwOnBatch = 0,
     this.throwAfterProbe = 0,
   });
@@ -763,12 +864,17 @@ class _FakeEvaluator implements GenomeEvaluator {
   final int rtt;
   final String country;
   String? prepareReason;
+  Future<void> Function()? beforePrepare;
 
   /// Сколько HTTP-запросов стоит один вердикт (ротация источников гео).
   final int requestsPerProbe;
+  final int Function(Genome genome, int attempt)? requestCost;
 
   /// Возвращать оценки только для половины особей (урезанный ответ ядра).
   final bool truncate;
+
+  /// Возвращать наблюдения без `onOne`, чтобы проверить extras после evaluate.
+  final bool stream;
 
   /// Бросить исключение на этом rang-е (нумерация с единицы).
   final int throwOnBatch;
@@ -792,6 +898,7 @@ class _FakeEvaluator implements GenomeEvaluator {
 
   @override
   Future<String?> prepareFor(List<Genome> genomes) async {
+    await beforePrepare?.call();
     preparedFor.add(List.of(genomes));
     return prepare();
   }
@@ -828,17 +935,18 @@ class _FakeEvaluator implements GenomeEvaluator {
           break;
         }
         final ok = (pass ?? (_) => true)(genomes[i]);
+        final cost = requestCost?.call(genomes[i], a) ?? requestsPerProbe;
         final o = ok
             ? Observation(
                 responded: true,
                 status: 200,
                 rttMs: rtt,
                 country: country,
-                requests: requestsPerProbe)
-            : Observation.failed('timeout', requests: requestsPerProbe);
+                requests: cost)
+            : Observation.failed('timeout', requests: cost);
         list.add(o);
         probed.add(genomes[i].key);
-        if (i < limit) onOne?.call(i, o);
+        if (i < limit && stream) onOne?.call(i, o);
         if (throwAfterProbe > 0 && probed.length == throwAfterProbe) {
           throw StateError('probe exploded mid-rung');
         }
@@ -853,7 +961,7 @@ class _FakeEvaluator implements GenomeEvaluator {
             : 'cancelled before probe';
         final o = Observation.failed(reason, requests: 0);
         out[i].add(o);
-        onOne?.call(i, o);
+        if (stream) onOne?.call(i, o);
       }
       return out;
     }

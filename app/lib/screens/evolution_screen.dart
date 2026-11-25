@@ -40,6 +40,7 @@ import '../services/evolution/pools.dart';
 import '../services/evolution/probe_evaluator.dart';
 import '../services/evolution/seeds.dart';
 import '../services/evolution/settings.dart';
+import '../services/format_utils.dart';
 import '../services/l10n/locale_controller.dart';
 import '../services/settings_storage.dart';
 import '../services/ui_helpers.dart';
@@ -385,6 +386,15 @@ class _EvolutionScreenState extends State<EvolutionScreen>
   /// итог прогона известен только после `run()`.
   int get _spent =>
       _running ? (_engine?.requestsUsed ?? _requestsUsed) : _requestsUsed;
+
+  EvolutionForecast get _forecast => EvolutionForecast.estimate(
+        settings: _settings,
+        requestsUsed: _spent,
+        observedVerdicts: _engine?.observedVerdicts ?? 0,
+        paidVerdicts: _engine?.paidVerdicts ?? 0,
+        activeTime: _engine?.activeTime ?? Duration.zero,
+        worstCaseRequestsPerVerdict: kGeoUrls.length,
+      );
 
   void _onObservation(Genome g, Fitness f, int rung) {
     // Первая проба новой кампании — живая таблица начинается заново: движок
@@ -873,9 +883,17 @@ class _EvolutionScreenState extends State<EvolutionScreen>
   }
 
   Widget _budgetBar(ColorScheme cs) {
-    final est = estimateRequests(_settings);
+    final forecast = _forecast;
+    final liveForecast = (_running || _outcome != null) &&
+        (_engine?.observedVerdicts ?? 0) > 0;
+    final est = liveForecast
+        ? forecast.projectedRequests
+        : estimateRequests(
+            _settings,
+            requestsPerVerdict: kGeoUrls.length,
+          );
     final spent = (_spent / _settings.maxRequests).clamp(0.0, 1.0);
-    final over = est > _settings.maxRequests;
+    final over = liveForecast ? forecast.budgetLimited : est > _settings.maxRequests;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -904,6 +922,32 @@ class _EvolutionScreenState extends State<EvolutionScreen>
             color: over ? cs.tertiary : cs.onSurfaceVariant,
           ),
         ),
+        if (liveForecast) ...[
+          if (forecast.paidVerdicts > 0)
+            Text(
+              getLocalText.s(
+                "Current rate: %1\$s requests per verdict",
+                forecast.requestsPerVerdict.toStringAsFixed(1),
+              ),
+              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+            ),
+          Text(
+            getLocalText.s(
+              "Budget covers about %1\$s of %2\$s generations at this rate",
+              '${forecast.generationsWithinBudget}',
+              '${_settings.maxGenerations}',
+            ),
+            style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+          ),
+          if (forecast.eta != null)
+            Text(
+              getLocalText.s(
+                "Estimated time remaining: %1\$s",
+                formatDuration(forecast.eta!),
+              ),
+              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+            ),
+        ],
       ],
     );
   }
@@ -1406,23 +1450,6 @@ class _EvolutionScreenState extends State<EvolutionScreen>
 /// оставаться ≥ `jitterMin` (AWG-пара проверяется связью реестра, и «случайный»
 /// максимум меньше минимума дал бы кандидат, который ядро отвергает целиком).
 const _lockedLocus = EvoLocus.jitterMax;
-
-/// Цена прогона в ЗАПРОСАХ (верхняя оценка): successive halving берёт
-/// `attempts[i]` проб у `alive` особей, затем `alive = keepOf(alive)`. Одна
-/// проба — это серия GET'ов по источникам гео (§844: мёртвый адрес стоит
-/// `kGeoUrls.length` запросов, живой — один), поэтому вердикт умножается на их
-/// число. Низкую цену показывать нельзя: пользователь выбирает бюджет по ней.
-int estimateRequests(EvolutionSettings s) {
-  if (s.rungAttempts.isEmpty) return 0;
-  var perGeneration = 0;
-  var alive = s.populationSize;
-  for (final attempts in s.rungAttempts) {
-    if (alive <= 0) break;
-    perGeneration += attempts * alive;
-    alive = s.keepOf(alive);
-  }
-  return perGeneration * s.maxGenerations * kGeoUrls.length;
-}
 
 // ───────────────────────── виджеты ─────────────────────────
 
@@ -1933,7 +1960,10 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final cost = estimateRequests(_s);
+    final cost = estimateRequests(
+      _s,
+      requestsPerVerdict: kGeoUrls.length,
+    );
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.9,

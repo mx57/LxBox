@@ -1672,6 +1672,9 @@
   "Cumulative delay to each hop; (+X) is what that hop added.": {
     "value": "到每一跳的累计延迟；(＋X) 是该跳新增的部分。"
   },
+  "Current rate: %1$s requests per verdict": {
+    "value": "当前速率：每个判定 %1$s 次请求"
+  },
   "Custom": {
     "value": "自定义"
   },
@@ -6599,6 +6602,9 @@
   "Budget used by manual servers": {
     "value": "预算已被手动服务器占满"
   },
+  "Budget covers about %1$s of %2$s generations at this rate": {
+    "value": "按此速率，预算约可完成 %1$s / %2$s 代"
+  },
   "Browser": {
     "value": "浏览器"
   },
@@ -7024,6 +7030,9 @@
   },
   "Estimated %1$s requests for the full run — budget %2$s will cut it short": {
     "value": "预计整个运行需要 %1$s 次请求——预算 %2$s 将提前终止"
+  },
+  "Estimated time remaining: %1$s": {
+    "value": "预计剩余时间：%1$s"
   },
   "Evolution log": {
     "value": "演化日志"

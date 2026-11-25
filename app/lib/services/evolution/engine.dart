@@ -132,6 +132,109 @@ String topReasons(Map<String, int> counts, {int max = 3}) {
   return [for (final e in list.take(max)) '${e.key} ×${e.value}'].join('; ');
 }
 
+int estimateVerdictsPerGeneration(EvolutionSettings settings) {
+  var alive = settings.populationSize;
+  var verdicts = 0;
+  for (final attempts in settings.rungAttempts) {
+    if (alive <= 0) break;
+    verdicts += attempts * alive;
+    alive = settings.keepOf(alive);
+  }
+  return verdicts;
+}
+
+int estimateVerdicts(EvolutionSettings settings) =>
+    estimateVerdictsPerGeneration(settings) *
+    max(0, settings.maxGenerations);
+
+int estimateRequests(
+  EvolutionSettings settings, {
+  int requestsPerVerdict = 1,
+}) =>
+    estimateVerdicts(settings) * max(1, requestsPerVerdict);
+
+class EvolutionForecast {
+  const EvolutionForecast({
+    required this.plannedVerdicts,
+    required this.observedVerdicts,
+    required this.paidVerdicts,
+    required this.remainingVerdicts,
+    required this.requestsPerVerdict,
+    required this.projectedRequests,
+    required this.budgetCappedRequests,
+    required this.generationsWithinBudget,
+    required this.budgetLimited,
+    required this.eta,
+  });
+
+  factory EvolutionForecast.estimate({
+    required EvolutionSettings settings,
+    required int requestsUsed,
+    required int observedVerdicts,
+    required int paidVerdicts,
+    required Duration activeTime,
+    required int worstCaseRequestsPerVerdict,
+  }) {
+    final planned = estimateVerdicts(settings);
+    final observed = max(0, observedVerdicts);
+    final paid = max(0, paidVerdicts);
+    final spent = max(0, requestsUsed);
+    final budget = max(0, settings.maxRequests);
+    final fallbackPrice = max(1, worstCaseRequestsPerVerdict).toDouble();
+    final price = paid == 0 ? fallbackPrice : spent / paid;
+    final remaining = max(0, planned - observed);
+    final projected = spent + price * remaining;
+    final projectedRequests = projected.ceil();
+    final budgetCappedRequests = max(
+      spent,
+      min(projectedRequests, budget),
+    );
+    final perGeneration = estimateVerdictsPerGeneration(settings);
+    final generationsWithinBudget = perGeneration == 0
+        ? max(0, settings.maxGenerations)
+        : (budget / (price * perGeneration))
+            .floor()
+            .clamp(0, max(0, settings.maxGenerations))
+            .toInt();
+    final affordableRemaining = min(
+      remaining,
+      (max(0, budget - spent) / price).floor(),
+    );
+    final eta = observed > 0 &&
+            activeTime > Duration.zero &&
+            affordableRemaining > 0
+        ? Duration(
+            microseconds: (activeTime.inMicroseconds / observed *
+                    affordableRemaining)
+                .round(),
+          )
+        : null;
+    return EvolutionForecast(
+      plannedVerdicts: planned,
+      observedVerdicts: observed,
+      paidVerdicts: paid,
+      remainingVerdicts: remaining,
+      requestsPerVerdict: price,
+      projectedRequests: projectedRequests,
+      budgetCappedRequests: budgetCappedRequests,
+      generationsWithinBudget: generationsWithinBudget,
+      budgetLimited: projected > budget,
+      eta: eta,
+    );
+  }
+
+  final int plannedVerdicts;
+  final int observedVerdicts;
+  final int paidVerdicts;
+  final int remainingVerdicts;
+  final double requestsPerVerdict;
+  final int projectedRequests;
+  final int budgetCappedRequests;
+  final int generationsWithinBudget;
+  final bool budgetLimited;
+  final Duration? eta;
+}
+
 /// Итог прогона.
 class EvolutionOutcome {
   const EvolutionOutcome({
@@ -197,10 +300,16 @@ class EvolutionEngine {
   bool _started = false;
   Completer<void>? _pauseGate;
   int _requestsUsed = 0;
+  int _observedVerdicts = 0;
+  int _paidVerdicts = 0;
+  Duration _activeTime = Duration.zero;
   String _error = '';
 
   bool get cancelled => _cancelled;
   int get requestsUsed => _requestsUsed;
+  int get observedVerdicts => _observedVerdicts;
+  int get paidVerdicts => _paidVerdicts;
+  Duration get activeTime => _activeTime;
   List<GenerationSummary> get stats => List.unmodifiable(_stats);
   List<EvoRecord> get records => List.unmodifiable(_records.values);
 
@@ -311,6 +420,7 @@ class EvolutionEngine {
       final batch = [for (final k in tier) current[k]!.genome];
       final streamed = <int, List<Observation>>{};
       late final List<List<Observation>> results;
+      final watch = Stopwatch()..start();
       try {
         results = await evaluator.evaluate(
           batch,
@@ -320,8 +430,7 @@ class EvolutionEngine {
           onOne: (i, o) {
             if (i < 0 || i >= batch.length) return;
             (streamed[i] ??= <Observation>[]).add(o);
-            // Следующая проба не должна стартовать, пока её цена ещё не учтена.
-            _requestsUsed += o.requests;
+            _accountObservation(o);
             onObservation?.call(batch[i], current[batch[i].key]!, rung);
           },
         );
@@ -336,6 +445,9 @@ class EvolutionEngine {
                 Observation.failed(reason, requests: 0),
             ],
         ];
+      } finally {
+        watch.stop();
+        _activeTime += watch.elapsed;
       }
       rung++;
       var aliveKeys = <String>[];
@@ -349,7 +461,7 @@ class EvolutionEngine {
             : const Iterable<Observation>.empty();
         final obs = [...notified, ...extra];
         for (final o in extra) {
-          _requestsUsed += o.requests;
+          _accountObservation(o);
         }
         for (final o in obs) {
           f.add(o);
@@ -712,6 +824,13 @@ class EvolutionEngine {
     final i = _reserve.indexWhere((g) => g.isVerbatim == private);
     if (i < 0) return null;
     return _reserve.removeAt(i);
+  }
+
+  void _accountObservation(Observation observation) {
+    // Следующая проба не должна стартовать, пока её цена ещё не учтена.
+    _requestsUsed += observation.requests;
+    _observedVerdicts++;
+    if (observation.requests > 0) _paidVerdicts++;
   }
 
   List<Genome> _dedupe(List<Genome> pop) {

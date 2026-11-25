@@ -1888,6 +1888,9 @@
   "Cumulative delay to each hop; (+X) is what that hop added.": {
     "value": "Накопленная задержка до каждого хопа; (+X) — сколько добавил этот хоп."
   },
+  "Current rate: %1$s requests per verdict": {
+    "value": "Текущая цена: %1$s запросов на вердикт"
+  },
   "Custom": {
     "value": "Вручную"
   },
@@ -6890,6 +6893,9 @@
   "Budget used by manual servers": {
     "value": "Бюджет занят ручными серверами"
   },
+  "Budget covers about %1$s of %2$s generations at this rate": {
+    "value": "При таком темпе бюджет хватает примерно на %1$s из %2$s поколений"
+  },
   "Browser": {
     "value": "Браузер"
   },
@@ -7315,6 +7321,9 @@
   },
   "Estimated %1$s requests for the full run — budget %2$s will cut it short": {
     "value": "Ожидается запросов за весь прогон: %1$s · бюджет %2$s прервёт его"
+  },
+  "Estimated time remaining: %1$s": {
+    "value": "Осталось примерно: %1$s"
   },
   "Evolution log": {
     "value": "Журнал эволюции"
