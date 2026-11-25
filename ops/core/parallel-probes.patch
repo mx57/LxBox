@@ -1,0 +1,691 @@
+diff --git a/experimental/libbox/command_client.go b/experimental/libbox/command_client.go
+index 8e5d64f..9972b51 100644
+--- a/experimental/libbox/command_client.go
++++ b/experimental/libbox/command_client.go
+@@ -23,22 +23,28 @@ import (
+ )
+ 
+ type CommandClient struct {
+-	handler           CommandClientHandler
+-	grpcConn          *grpc.ClientConn
+-	grpcClient        daemon.StartedServiceClient
+-	grpcManagedClient daemon.ManagedServiceClient
+-	options           CommandClientOptions
+-	remote            *remoteConnection
+-	ctx               context.Context
+-	cancel            context.CancelFunc
+-	clientAccess      sync.RWMutex
+-	connectAccess     sync.Mutex
+-	standalone        bool
++	handler                 CommandClientHandler
++	grpcConn                *grpc.ClientConn
++	grpcClient              daemon.StartedServiceClient
++	grpcManagedClient       daemon.ManagedServiceClient
++	options                 CommandClientOptions
++	remote                  *remoteConnection
++	ctx                     context.Context
++	cancel                  context.CancelFunc
++	clientAccess            sync.RWMutex
++	connectAccess           sync.Mutex
++	standalone              bool
++	commandServerListenPort int32
++	commandServerUseTCP     bool
++	commandServerSecret     string
+ }
+ 
+ type CommandClientOptions struct {
+-	commands       []int32
+-	StatusInterval int64
++	commands                []int32
++	StatusInterval          int64
++	CommandServerListenPort int32
++	CommandServerUseTCP     bool
++	CommandServerSecret     string
+ 	// lx:begin dns
+ 	DNSIncludeAnswers bool // SPEC 018 — attach full response.Answer per DNS event (CNAME chain)
+ 	// lx:end dns
+@@ -97,26 +103,44 @@ func NewStandaloneCommandClient() *CommandClient {
+ 
+ func NewCommandClient(handler CommandClientHandler, options *CommandClientOptions) *CommandClient {
+ 	ctx, cancel := context.WithCancel(context.Background())
+-	return &CommandClient{
+-		handler: handler,
+-		options: common.PtrValueOrDefault(options),
+-		ctx:     ctx,
+-		cancel:  cancel,
++	resolved := common.PtrValueOrDefault(options)
++	client := &CommandClient{
++		handler:             handler,
++		options:             resolved,
++		ctx:                 ctx,
++		cancel:              cancel,
++		commandServerSecret: resolved.CommandServerSecret,
++	}
++	if resolved.CommandServerUseTCP || resolved.CommandServerListenPort != 0 {
++		client.commandServerListenPort = resolved.CommandServerListenPort
++		client.commandServerUseTCP = resolved.CommandServerUseTCP
++	}
++	return client
++}
++
++func (c *CommandClient) authSecret() string {
++	if c.commandServerSecret != "" {
++		return c.commandServerSecret
+ 	}
++	return sCommandServerSecret
+ }
+ 
+-func unaryClientAuthInterceptor(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+-	if sCommandServerSecret != "" {
+-		ctx = metadata.AppendToOutgoingContext(ctx, "x-command-secret", sCommandServerSecret)
++func unaryClientAuthInterceptor(secret string) grpc.UnaryClientInterceptor {
++	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
++		if secret != "" {
++			ctx = metadata.AppendToOutgoingContext(ctx, "x-command-secret", secret)
++		}
++		return invoker(ctx, method, req, reply, cc, opts...)
+ 	}
+-	return invoker(ctx, method, req, reply, cc, opts...)
+ }
+ 
+-func streamClientAuthInterceptor(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+-	if sCommandServerSecret != "" {
+-		ctx = metadata.AppendToOutgoingContext(ctx, "x-command-secret", sCommandServerSecret)
++func streamClientAuthInterceptor(secret string) grpc.StreamClientInterceptor {
++	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
++		if secret != "" {
++			ctx = metadata.AppendToOutgoingContext(ctx, "x-command-secret", secret)
++		}
++		return streamer(ctx, desc, cc, method, opts...)
+ 	}
+-	return streamer(ctx, desc, cc, method, opts...)
+ }
+ 
+ const (
+@@ -130,8 +154,8 @@ func commandClientDialDelay(attempt int) time.Duration {
+ 	return commandClientDialBaseDelay + time.Duration(attempt)*commandClientDialStepDelay
+ }
+ 
+-func dialTarget() (string, func(context.Context, string) (net.Conn, error)) {
+-	if sXPCDialer != nil {
++func dialTargetFor(listenPort int32, useTCP bool) (string, func(context.Context, string) (net.Conn, error)) {
++	if !useTCP && sXPCDialer != nil {
+ 		return "passthrough:///xpc", func(ctx context.Context, _ string) (net.Conn, error) {
+ 			fileDescriptor, err := sXPCDialer.DialXPC()
+ 			if err != nil {
+@@ -140,14 +164,14 @@ func dialTarget() (string, func(context.Context, string) (net.Conn, error)) {
+ 			return networkConnectionFromFileDescriptor(fileDescriptor)
+ 		}
+ 	}
+-	if sCommandServerListenPort == 0 {
++	if listenPort == 0 {
+ 		socketPath := filepath.Join(sBasePath, "command.sock")
+ 		return "passthrough:///command-socket", func(ctx context.Context, _ string) (net.Conn, error) {
+ 			var networkDialer net.Dialer
+ 			return networkDialer.DialContext(ctx, "unix", socketPath)
+ 		}
+ 	}
+-	return net.JoinHostPort("127.0.0.1", strconv.Itoa(int(sCommandServerListenPort))), nil
++	return net.JoinHostPort("127.0.0.1", strconv.Itoa(int(listenPort))), nil
+ }
+ 
+ func networkConnectionFromFileDescriptor(fileDescriptor int32) (net.Conn, error) {
+@@ -164,11 +188,14 @@ func networkConnectionFromFileDescriptor(fileDescriptor int32) (net.Conn, error)
+ 	return networkConnection, nil
+ }
+ 
+-func localDialOptions(contextDialer func(context.Context, string) (net.Conn, error)) []grpc.DialOption {
++func localDialOptions(
++	contextDialer func(context.Context, string) (net.Conn, error),
++	secret string,
++) []grpc.DialOption {
+ 	options := []grpc.DialOption{
+ 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+-		grpc.WithChainUnaryInterceptor(daemon.UnaryClientLocaleInterceptor, unaryClientAuthInterceptor),
+-		grpc.WithChainStreamInterceptor(daemon.StreamClientLocaleInterceptor, streamClientAuthInterceptor),
++		grpc.WithChainUnaryInterceptor(daemon.UnaryClientLocaleInterceptor, unaryClientAuthInterceptor(secret)),
++		grpc.WithChainStreamInterceptor(daemon.StreamClientLocaleInterceptor, streamClientAuthInterceptor(secret)),
+ 	}
+ 	if contextDialer != nil {
+ 		options = append(options, grpc.WithContextDialer(contextDialer))
+@@ -182,8 +209,12 @@ func (c *CommandClient) establishConnection(ctx context.Context) (*grpc.ClientCo
+ 	if c.remote != nil {
+ 		return c.dialRemote(ctx)
+ 	}
+-	target, contextDialer := dialTarget()
+-	return c.dialWithRetry(ctx, target, localDialOptions(contextDialer), !c.standalone)
++	listenPort := c.commandServerListenPort
++	if listenPort == 0 && !c.commandServerUseTCP {
++		listenPort = int32(sCommandServerListenPort)
++	}
++	target, contextDialer := dialTargetFor(listenPort, c.commandServerUseTCP)
++	return c.dialWithRetry(ctx, target, localDialOptions(contextDialer, c.authSecret()), !c.standalone)
+ }
+ 
+ // dialWithRetry connects to the local command server. For a handler-bound
+@@ -275,7 +306,7 @@ func (c *CommandClient) ConnectWithFD(fd int32) error {
+ 	err = c.connect(func(ctx context.Context) (*grpc.ClientConn, daemon.StartedServiceClient, error) {
+ 		return c.dialWithRetry(ctx, "passthrough:///xpc", localDialOptions(func(context.Context, string) (net.Conn, error) {
+ 			return networkConnection, nil
+-		}), false)
++		}, c.authSecret()), false)
+ 	})
+ 	if err != nil {
+ 		networkConnection.Close()
+diff --git a/experimental/libbox/command_server.go b/experimental/libbox/command_server.go
+index 33d8642..7006c75 100644
+--- a/experimental/libbox/command_server.go
++++ b/experimental/libbox/command_server.go
+@@ -27,15 +27,22 @@ import (
+ 
+ type CommandServer struct {
+ 	*daemon.StartedService
+-	ctx               context.Context
+-	managedService    *daemon.ManagedService
+-	handler           CommandServerHandler
+-	platformInterface PlatformInterface
+-	platformWrapper   *platformInterfaceWrapper
+-	powerManager      *powerreport.Manager
+-	oomRecorder       *oomkiller.Recorder
+-	grpcServer        *grpc.Server
+-	listener          net.Listener
++	ctx                     context.Context
++	managedService          *daemon.ManagedService
++	handler                 CommandServerHandler
++	platformInterface       PlatformInterface
++	platformWrapper         *platformInterfaceWrapper
++	powerManager            *powerreport.Manager
++	oomRecorder             *oomkiller.Recorder
++	grpcServer              *grpc.Server
++	listener                net.Listener
++	basePath                string
++	workingPath             string
++	tempPath                string
++	snapshotPath            string
++	commandServerListenPort int32
++	commandServerUseTCP     bool
++	commandServerSecret     string
+ }
+ 
+ type CommandServerHandler interface {
+@@ -48,8 +55,51 @@ type CommandServerHandler interface {
+ 	ConnectSSHAgent() (int32, error)
+ }
+ 
++type CommandServerOptions struct {
++	CommandServerListenPort int32
++	CommandServerUseTCP     bool
++	CommandServerSecret     string
++	BasePath                string
++	WorkingPath             string
++	TempPath                string
++}
++
++func resolveCommandServerOptions(options *CommandServerOptions) CommandServerOptions {
++	if options == nil {
++		return CommandServerOptions{
++			CommandServerListenPort: int32(sCommandServerListenPort),
++			CommandServerSecret:     sCommandServerSecret,
++			BasePath:                sBasePath,
++			WorkingPath:             sWorkingPath,
++			TempPath:                sTempPath,
++		}
++	}
++	resolved := *options
++	if resolved.BasePath == "" {
++		resolved.BasePath = sBasePath
++	}
++	if resolved.WorkingPath == "" {
++		resolved.WorkingPath = sWorkingPath
++	}
++	if resolved.TempPath == "" {
++		resolved.TempPath = sTempPath
++	}
++	if resolved.CommandServerListenPort == 0 && !resolved.CommandServerUseTCP {
++		resolved.CommandServerListenPort = int32(sCommandServerListenPort)
++	}
++	if resolved.CommandServerSecret == "" {
++		resolved.CommandServerSecret = sCommandServerSecret
++	}
++	return resolved
++}
++
+ func NewCommandServer(handler CommandServerHandler, platformInterface PlatformInterface) (*CommandServer, error) {
+-	ctx := baseContext(platformInterface)
++	return NewCommandServerWithOptions(handler, platformInterface, nil)
++}
++
++func NewCommandServerWithOptions(handler CommandServerHandler, platformInterface PlatformInterface, options *CommandServerOptions) (*CommandServer, error) {
++	resolved := resolveCommandServerOptions(options)
++	ctx := baseContextWithPaths(platformInterface, resolved.WorkingPath, resolved.TempPath)
+ 	powerManager := powerreport.NewManager()
+ 	service.MustRegister[*powerreport.Manager](ctx, powerManager)
+ 	platformWrapper := &platformInterfaceWrapper{
+@@ -58,11 +108,18 @@ func NewCommandServer(handler CommandServerHandler, platformInterface PlatformIn
+ 	}
+ 	service.MustRegister[adapter.PlatformInterface](ctx, platformWrapper)
+ 	server := &CommandServer{
+-		ctx:               ctx,
+-		handler:           handler,
+-		platformInterface: platformInterface,
+-		platformWrapper:   platformWrapper,
+-		powerManager:      powerManager,
++		ctx:                     ctx,
++		handler:                 handler,
++		platformInterface:       platformInterface,
++		platformWrapper:         platformWrapper,
++		powerManager:            powerManager,
++		basePath:                resolved.BasePath,
++		workingPath:             resolved.WorkingPath,
++		tempPath:                resolved.TempPath,
++		snapshotPath:            filepath.Join(resolved.BasePath, "configuration.json"),
++		commandServerListenPort: resolved.CommandServerListenPort,
++		commandServerUseTCP:     resolved.CommandServerUseTCP,
++		commandServerSecret:     resolved.CommandServerSecret,
+ 	}
+ 	server.StartedService = daemon.NewStartedService(daemon.ServiceOptions{
+ 		Context: ctx,
+@@ -80,7 +137,7 @@ func NewCommandServer(handler CommandServerHandler, platformInterface PlatformIn
+ 		// SystemProxyEnabled: false,
+ 		OOMMemoryLimitHeap: sOOMMemoryLimitHeap, // lx: SPEC 148
+ 	})
+-	oomRecorder := oomkiller.NewRecorder(OOMRecorderOptions(server.StartedService))
++	oomRecorder := oomkiller.NewRecorder(OOMRecorderOptionsAt(server.StartedService, resolved.WorkingPath, server.snapshotPath))
+ 	service.MustRegister[*oomkiller.Recorder](ctx, oomRecorder)
+ 	oomRecorder.Start()
+ 	server.oomRecorder = oomRecorder
+@@ -90,7 +147,7 @@ func NewCommandServer(handler CommandServerHandler, platformInterface PlatformIn
+ 		OOMRecorder: oomRecorder,
+ 	})
+ 	if sPowerReportEnabled {
+-		err := powerManager.Start(PowerReportOptions(server.StartedService))
++		err := powerManager.Start(PowerReportOptionsAt(server.StartedService, resolved.WorkingPath))
+ 		if err != nil {
+ 			log.StdLogger().Error(E.Cause(err, "start power report recorder"))
+ 		}
+@@ -98,40 +155,40 @@ func NewCommandServer(handler CommandServerHandler, platformInterface PlatformIn
+ 	return server, nil
+ }
+ 
+-func unaryAuthInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+-	if sCommandServerSecret == "" {
+-		return handler(ctx, req)
++func validateCommandSecret(ctx context.Context, secret string) error {
++	if secret == "" {
++		return nil
+ 	}
+ 	md, ok := metadata.FromIncomingContext(ctx)
+ 	if !ok {
+-		return nil, status.Error(codes.Unauthenticated, "missing metadata")
++		return status.Error(codes.Unauthenticated, "missing metadata")
+ 	}
+ 	values := md.Get("x-command-secret")
+ 	if len(values) == 0 {
+-		return nil, status.Error(codes.Unauthenticated, "missing authentication secret")
++		return status.Error(codes.Unauthenticated, "missing authentication secret")
+ 	}
+-	if values[0] != sCommandServerSecret {
+-		return nil, status.Error(codes.Unauthenticated, "invalid authentication secret")
++	if values[0] != secret {
++		return status.Error(codes.Unauthenticated, "invalid authentication secret")
+ 	}
+-	return handler(ctx, req)
++	return nil
+ }
+ 
+-func streamAuthInterceptor(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+-	if sCommandServerSecret == "" {
+-		return handler(srv, ss)
+-	}
+-	md, ok := metadata.FromIncomingContext(ss.Context())
+-	if !ok {
+-		return status.Error(codes.Unauthenticated, "missing metadata")
+-	}
+-	values := md.Get("x-command-secret")
+-	if len(values) == 0 {
+-		return status.Error(codes.Unauthenticated, "missing authentication secret")
++func unaryAuthInterceptor(secret string) grpc.UnaryServerInterceptor {
++	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
++		if err := validateCommandSecret(ctx, secret); err != nil {
++			return nil, err
++		}
++		return handler(ctx, req)
+ 	}
+-	if values[0] != sCommandServerSecret {
+-		return status.Error(codes.Unauthenticated, "invalid authentication secret")
++}
++
++func streamAuthInterceptor(secret string) grpc.StreamServerInterceptor {
++	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
++		if err := validateCommandSecret(ss.Context(), secret); err != nil {
++			return err
++		}
++		return handler(srv, ss)
+ 	}
+-	return handler(srv, ss)
+ }
+ 
+ func (s *CommandServer) Start() error {
+@@ -139,8 +196,8 @@ func (s *CommandServer) Start() error {
+ 		listener net.Listener
+ 		err      error
+ 	)
+-	if sCommandServerListenPort == 0 {
+-		sockPath := filepath.Join(sBasePath, "command.sock")
++	if s.commandServerListenPort == 0 && !s.commandServerUseTCP {
++		sockPath := filepath.Join(s.basePath, "command.sock")
+ 		os.Remove(sockPath)
+ 		listener, err = net.ListenUnix("unix", &net.UnixAddr{
+ 			Name: sockPath,
+@@ -158,15 +215,15 @@ func (s *CommandServer) Start() error {
+ 			}
+ 		}
+ 	} else {
+-		listener, err = net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(int(sCommandServerListenPort))))
++		listener, err = net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(int(s.commandServerListenPort))))
+ 		if err != nil {
+ 			return E.Cause(err, "listen command server")
+ 		}
+ 	}
+ 	s.listener = listener
+ 	serverOptions := []grpc.ServerOption{
+-		grpc.ChainUnaryInterceptor(unaryAuthInterceptor, daemon.UnaryLocaleInterceptor),
+-		grpc.ChainStreamInterceptor(streamAuthInterceptor, daemon.StreamLocaleInterceptor),
++		grpc.ChainUnaryInterceptor(unaryAuthInterceptor(s.commandServerSecret), daemon.UnaryLocaleInterceptor),
++		grpc.ChainStreamInterceptor(streamAuthInterceptor(s.commandServerSecret), daemon.StreamLocaleInterceptor),
+ 	}
+ 	s.grpcServer = grpc.NewServer(serverOptions...)
+ 	daemon.RegisterStartedServiceServer(s.grpcServer, s.StartedService)
+@@ -179,6 +236,16 @@ func (s *CommandServer) Start() error {
+ 	return nil
+ }
+ 
++func (s *CommandServer) ListenPort() int32 {
++	if s.listener == nil {
++		return 0
++	}
++	if address, ok := s.listener.Addr().(*net.TCPAddr); ok {
++		return int32(address.Port)
++	}
++	return 0
++}
++
+ func (s *CommandServer) Close() {
+ 	if s.grpcServer != nil {
+ 		s.grpcServer.Stop()
+@@ -196,9 +263,9 @@ type OverrideOptions struct {
+ }
+ 
+ func (s *CommandServer) StartOrReloadService(configContent string, options *OverrideOptions) error {
+-	saveConfigSnapshot(configContent)
++	saveConfigSnapshotAt(s.snapshotPath, configContent)
+ 	if s.powerManager.Recorder() != nil {
+-		copyConfigSnapshot(filepath.Join(sWorkingPath, powerreport.DraftDirectoryName))
++		copyConfigSnapshotFrom(s.snapshotPath, filepath.Join(s.workingPath, powerreport.DraftDirectoryName))
+ 	}
+ 	err := s.StartedService.StartOrReloadService(s.ctx, configContent, &daemon.OverrideOptions{
+ 		AutoRedirect:   options.AutoRedirect,
+diff --git a/experimental/libbox/command_server_instances_lx_test.go b/experimental/libbox/command_server_instances_lx_test.go
+new file mode 100644
+index 0000000..5443630
+--- /dev/null
++++ b/experimental/libbox/command_server_instances_lx_test.go
+@@ -0,0 +1,144 @@
++package libbox
++
++import (
++	"context"
++	"net"
++	"strconv"
++	"testing"
++	"time"
++
++	"github.com/sagernet/sing-box/daemon"
++
++	"google.golang.org/grpc"
++	"google.golang.org/grpc/codes"
++	"google.golang.org/grpc/status"
++	"google.golang.org/protobuf/types/known/emptypb"
++)
++
++type testStartedService struct {
++	daemon.UnimplementedStartedServiceServer
++}
++
++func (testStartedService) GetStartedAt(context.Context, *emptypb.Empty) (*daemon.StartedAt, error) {
++	return &daemon.StartedAt{}, nil
++}
++
++func startTestCommandServer(t *testing.T, secret string) (int32, func()) {
++	t.Helper()
++	listener, err := net.Listen("tcp", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	server := grpc.NewServer(grpc.ChainUnaryInterceptor(unaryAuthInterceptor(secret)))
++	daemon.RegisterStartedServiceServer(server, testStartedService{})
++	go server.Serve(listener)
++	return int32(listener.Addr().(*net.TCPAddr).Port), server.Stop
++}
++
++func newTestCommandClient(port int32, secret string) *CommandClient {
++	client := NewCommandClient(nil, &CommandClientOptions{
++		CommandServerListenPort: port,
++		CommandServerUseTCP:     true,
++		CommandServerSecret:     secret,
++	})
++	client.standalone = true
++	return client
++}
++
++func connectTestCommandClient(t *testing.T, client *CommandClient) {
++	t.Helper()
++	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
++	defer cancel()
++	connection, _, err := client.establishConnection(ctx)
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { connection.Close() })
++}
++
++func TestCommandClientUsesPerInstanceEndpointAndSecret(t *testing.T) {
++	firstPort, stopFirst := startTestCommandServer(t, "first-secret")
++	defer stopFirst()
++	secondPort, stopSecond := startTestCommandServer(t, "second-secret")
++	defer stopSecond()
++
++	firstClient := newTestCommandClient(firstPort, "first-secret")
++	secondClient := newTestCommandClient(secondPort, "second-secret")
++	connectTestCommandClient(t, firstClient)
++	connectTestCommandClient(t, secondClient)
++
++	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
++	defer cancel()
++	wrongClient := newTestCommandClient(secondPort, "first-secret")
++	_, _, err := wrongClient.establishConnection(ctx)
++	if status.Code(err) != codes.Unauthenticated {
++		t.Fatalf("wrong secret error = %v", err)
++	}
++}
++
++func TestCommandClientReconnectKeepsInstanceEndpoint(t *testing.T) {
++	port, stop := startTestCommandServer(t, "reconnect-secret")
++	defer stop()
++	client := newTestCommandClient(port, "reconnect-secret")
++	connectTestCommandClient(t, client)
++	client.Disconnect()
++	connectTestCommandClient(t, client)
++
++	target, dialer := dialTargetFor(client.commandServerListenPort, client.commandServerUseTCP)
++	if target != net.JoinHostPort("127.0.0.1", strconv.Itoa(int(port))) || dialer != nil {
++		t.Fatalf("target = %q, dialer present = %v", target, dialer != nil)
++	}
++}
++
++func TestCommandInstancesPreserveProcessGlobalDefault(t *testing.T) {
++	oldBase, oldWorking, oldTemp := sBasePath, sWorkingPath, sTempPath
++	oldPort, oldSecret, oldXPC := sCommandServerListenPort, sCommandServerSecret, sXPCDialer
++	t.Cleanup(func() {
++		sBasePath, sWorkingPath, sTempPath = oldBase, oldWorking, oldTemp
++		sCommandServerListenPort, sCommandServerSecret, sXPCDialer = oldPort, oldSecret, oldXPC
++	})
++	sBasePath, sWorkingPath, sTempPath = "global-base", "global-work", "global-temp"
++	sCommandServerListenPort = 12345
++	sCommandServerSecret = "global-secret"
++	sXPCDialer = nil
++
++	resolved := resolveCommandServerOptions(nil)
++	if resolved.BasePath != sBasePath || resolved.WorkingPath != sWorkingPath || resolved.TempPath != sTempPath ||
++		resolved.CommandServerListenPort != int32(sCommandServerListenPort) || resolved.CommandServerSecret != sCommandServerSecret {
++		t.Fatalf("global defaults = %+v", resolved)
++	}
++	client := NewCommandClient(nil, &CommandClientOptions{})
++	if client.commandServerListenPort != 0 || client.commandServerUseTCP || client.authSecret() != sCommandServerSecret {
++		t.Fatalf("global client = %+v", client)
++	}
++	target, _ := dialTargetFor(int32(sCommandServerListenPort), client.commandServerUseTCP)
++	if target != net.JoinHostPort("127.0.0.1", "12345") {
++		t.Fatalf("global target = %q", target)
++	}
++}
++
++func TestCommandServerOptionsKeepEphemeralPortAndLocalPaths(t *testing.T) {
++	resolved := resolveCommandServerOptions(&CommandServerOptions{
++		CommandServerUseTCP: true,
++		CommandServerSecret: "instance-secret",
++		BasePath:            "instance-base",
++		WorkingPath:         "instance-work",
++		TempPath:            "instance-temp",
++	})
++	if resolved.CommandServerListenPort != 0 || !resolved.CommandServerUseTCP {
++		t.Fatalf("endpoint options = %+v", resolved)
++	}
++	if resolved.CommandServerSecret != "instance-secret" ||
++		resolved.BasePath != "instance-base" ||
++		resolved.WorkingPath != "instance-work" ||
++		resolved.TempPath != "instance-temp" {
++		t.Fatalf("instance options = %+v", resolved)
++	}
++}
++
++func TestCommandServerListenPortBeforeStart(t *testing.T) {
++	server := &CommandServer{}
++	if port := server.ListenPort(); port != 0 {
++		t.Fatalf("port before start = %d", port)
++	}
++}
+diff --git a/experimental/libbox/config.go b/experimental/libbox/config.go
+index a3f47f5..6a285f9 100644
+--- a/experimental/libbox/config.go
++++ b/experimental/libbox/config.go
+@@ -27,6 +27,10 @@ import (
+ )
+ 
+ func baseContext(platformInterface PlatformInterface) context.Context {
++	return baseContextWithPaths(platformInterface, sWorkingPath, sTempPath)
++}
++
++func baseContextWithPaths(platformInterface PlatformInterface, workingPath string, tempPath string) context.Context {
+ 	dnsRegistry := include.DNSTransportRegistry()
+ 	if platformInterface != nil {
+ 		if localTransport := platformInterface.LocalDNSTransport(); localTransport != nil {
+@@ -36,7 +40,7 @@ func baseContext(platformInterface PlatformInterface) context.Context {
+ 		}
+ 	}
+ 	ctx := context.Background()
+-	ctx = filemanager.WithDefault(ctx, sWorkingPath, sTempPath, sUserID, sGroupID)
++	ctx = filemanager.WithDefault(ctx, workingPath, tempPath, sUserID, sGroupID)
+ 	return box.Context(ctx, include.InboundRegistry(), include.OutboundRegistry(), include.EndpointRegistry(), dnsRegistry, include.ServiceRegistry(), include.CertificateProviderRegistry())
+ }
+ 
+diff --git a/experimental/libbox/log.go b/experimental/libbox/log.go
+index 3f53190..41d9d6f 100644
+--- a/experimental/libbox/log.go
++++ b/experimental/libbox/log.go
+@@ -65,7 +65,10 @@ func configSnapshotPath() string {
+ }
+ 
+ func saveConfigSnapshot(configContent string) {
+-	snapshotPath := configSnapshotPath()
++	saveConfigSnapshotAt(configSnapshotPath(), configContent)
++}
++
++func saveConfigSnapshotAt(snapshotPath string, configContent string) {
+ 	os.WriteFile(snapshotPath, []byte(configContent), 0o666)
+ 	chownReport(snapshotPath)
+ }
+diff --git a/experimental/libbox/oom_report.go b/experimental/libbox/oom_report.go
+index 7d0ee13..c793372 100644
+--- a/experimental/libbox/oom_report.go
++++ b/experimental/libbox/oom_report.go
+@@ -38,8 +38,12 @@ type oomReportMetadata struct {
+ }
+ 
+ func OOMRecorderOptions(startedService *daemon.StartedService) oomkiller.RecorderOptions {
++	return OOMRecorderOptionsAt(startedService, sWorkingPath, configSnapshotPath())
++}
++
++func OOMRecorderOptionsAt(startedService *daemon.StartedService, workingPath string, snapshotPath string) oomkiller.RecorderOptions {
+ 	return oomkiller.RecorderOptions{
+-		BasePath:    sWorkingPath,
++		BasePath:    workingPath,
+ 		Logger:      log.StdLogger(),
+ 		AcceptDraft: acceptOOMDraft,
+ 		MetadataCallback: func(status oomkiller.ReportStatus) any {
+@@ -63,7 +67,7 @@ func OOMRecorderOptions(startedService *daemon.StartedService) oomkiller.Recorde
+ 			// The recorder chowns the archive directory right before it creates a new
+ 			// report inside it (Recorder.WriteReport) — the one moment to cap the archive
+ 			// (SPEC 039: upstream never deletes reports).
+-			if filepath.Clean(path) == filepath.Join(sWorkingPath, oomkiller.ReportsDirectoryName) {
++			if filepath.Clean(path) == filepath.Join(workingPath, oomkiller.ReportsDirectoryName) {
+ 				pruneReports(path, maxReportCount, maxReportBytes)
+ 			}
+ 			// lx:end
+@@ -81,7 +85,7 @@ func OOMRecorderOptions(startedService *daemon.StartedService) oomkiller.Recorde
+ 			if err == nil {
+ 				chownReport(runtimeInfoPath)
+ 			}
+-			copyConfigSnapshot(directory)
++			copyConfigSnapshotFrom(snapshotPath, directory)
+ 			content := oomConnectionsContent(startedService)
+ 			if content != nil {
+ 				writeReportFile(directory, prefix+".connections.json", content)
+diff --git a/experimental/libbox/power_report.go b/experimental/libbox/power_report.go
+index 2d90c62..812ac50 100644
+--- a/experimental/libbox/power_report.go
++++ b/experimental/libbox/power_report.go
+@@ -17,12 +17,16 @@ type powerReportMetadata struct {
+ }
+ 
+ func PowerReportOptions(startedService *daemon.StartedService) powerreport.Options {
++	return PowerReportOptionsAt(startedService, sWorkingPath)
++}
++
++func PowerReportOptionsAt(startedService *daemon.StartedService, workingPath string) powerreport.Options {
+ 	metadata := powerReportMetadata{
+ 		reportMetadata: baseReportMetadata(),
+ 		StartedAt:      time.Now().UTC().Format(time.RFC3339),
+ 	}
+ 	return powerreport.Options{
+-		BasePath:      sWorkingPath,
++		BasePath:      workingPath,
+ 		Logger:        log.StdLogger(),
+ 		Metadata:      metadata,
+ 		OwnerCallback: chownReport,
+diff --git a/experimental/libbox/report.go b/experimental/libbox/report.go
+index 77cbbfa..ff35d9b 100644
+--- a/experimental/libbox/report.go
++++ b/experimental/libbox/report.go
+@@ -62,7 +62,10 @@ func writeReportMetadata(destPath string, metadata any) {
+ }
+ 
+ func copyConfigSnapshot(destPath string) {
+-	snapshotPath := configSnapshotPath()
++	copyConfigSnapshotFrom(configSnapshotPath(), destPath)
++}
++
++func copyConfigSnapshotFrom(snapshotPath string, destPath string) {
+ 	content, err := os.ReadFile(snapshotPath)
+ 	if err != nil {
+ 		return

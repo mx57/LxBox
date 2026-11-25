@@ -124,13 +124,12 @@ class SerialLaneTest {
     }
 
     @Test
-    fun `probe stops the network monitor only when the vpn service is fully stopped`() {
-        assertTrue(probeMayStopMonitor(false, VpnStatus.Stopped))
-        // Служба стартует: commandClient ещё null, монитор уже её.
-        assertFalse(probeMayStopMonitor(false, VpnStatus.Starting))
-        assertFalse(probeMayStopMonitor(false, VpnStatus.Stopping))
-        assertFalse(probeMayStopMonitor(false, VpnStatus.Started))
-        assertFalse(probeMayStopMonitor(true, VpnStatus.Started))
-        assertFalse(probeMayStopMonitor(true, VpnStatus.Stopped))
+    fun `probe starts only when the vpn service is fully stopped`() {
+        assertTrue(probeMayStart(false, VpnStatus.Stopped))
+        assertFalse(probeMayStart(false, VpnStatus.Starting))
+        assertFalse(probeMayStart(false, VpnStatus.Stopping))
+        assertFalse(probeMayStart(false, VpnStatus.Started))
+        assertFalse(probeMayStart(true, VpnStatus.Started))
+        assertFalse(probeMayStart(true, VpnStatus.Stopped))
     }
 }

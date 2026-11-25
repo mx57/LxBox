@@ -9,20 +9,52 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.net.NetworkInterface
+import java.util.Collections
+import java.util.IdentityHashMap
+
+internal class InterfaceUpdateFanout {
+    private val listeners = Collections.newSetFromMap(
+        IdentityHashMap<InterfaceUpdateListener, Boolean>(),
+    )
+
+    @Synchronized
+    fun add(listener: InterfaceUpdateListener): Boolean = listeners.add(listener)
+
+    @Synchronized
+    fun remove(listener: InterfaceUpdateListener) {
+        listeners.remove(listener)
+    }
+
+    @Synchronized
+    fun snapshot(): List<InterfaceUpdateListener> = listeners.toList()
+
+    @Synchronized
+    fun contains(listener: InterfaceUpdateListener): Boolean = listener in listeners
+}
 
 object DefaultNetworkMonitor {
     /// §087 — окно debounce для force-reset на смену интерфейса (мс). Android
     /// при переходе шлёт пачку callback'ов; копим тишину и ресетим один раз.
     private const val RESET_DEBOUNCE_MS = 1500L
 
-    var defaultNetwork: Network? = null
-    private var listener: InterfaceUpdateListener? = null
-    private var scope: CoroutineScope? = null
+    private data class Owner(
+        val scope: CoroutineScope,
+        val onNetworkSwitch: () -> Unit,
+    )
 
-    /// §087 — callback на genuine смену интерфейса (BoxService → resetNetwork()).
-    private var onNetworkSwitch: (() -> Unit)? = null
+    var defaultNetwork: Network? = null
+    private val listeners = InterfaceUpdateFanout()
+    private val owners = linkedMapOf<Any, Owner>()
+    private val lifecycleMutex = Mutex()
+
+    /// §087 — callback'и владельцев монитора (VPN и probe) на switch интерфейса.
+    @Volatile
+    private var onNetworkSwitch: List<() -> Unit> = emptyList()
 
     /// §087 — имя последнего реального интерфейса (baseline для детекта смены).
     /// `@Volatile`: пишется из notifySync (attach-thread) и checkUpdate (actor).
@@ -30,46 +62,62 @@ object DefaultNetworkMonitor {
     private var lastIfName: String? = null
     private var resetJob: Job? = null
 
-    suspend fun start(scope: CoroutineScope, onNetworkSwitch: () -> Unit) {
-        this.scope = scope
-        this.onNetworkSwitch = onNetworkSwitch
-        // §119 — seed `defaultNetwork` из getActiveNetwork(), но НИКОГДА не нашим
-        // же VPN. getActiveNetwork() возвращает per-app default, который штатно
-        // ВКЛЮЧАЕТ наш tun, если VPN уже поднят к моменту start() (док:
-        // ConnectivityManager.getActiveNetwork / registerDefaultNetworkCallback —
-        // «may be ... a VPN that applies to the application»). Если пустить такой
-        // seed в LocalResolver, DnsResolver.query(VPN) уйдёт обратно в tun → loop.
-        // NOT_VPN из NetworkRequest сюда НЕ применяется (это прямой геттер, не
-        // запрос), поэтому фильтруем явно. Callback-источник (ниже) уже отфильтрован
-        // NOT_VPN'ом самого NetworkRequest и здесь перезапишет seed.
-        defaultNetwork = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            BoxApplication.connectivity.activeNetwork?.takeUnless(::isVpn)
-        } else null
-        logDefaultNetwork("init", defaultNetwork)
+    suspend fun start(owner: Any, scope: CoroutineScope, onNetworkSwitch: () -> Unit) {
+        lifecycleMutex.withLock {
+            val firstOwner = synchronized(owners) { owners.isEmpty() }
+            synchronized(owners) {
+                owners[owner] = Owner(scope, onNetworkSwitch)
+                this.onNetworkSwitch = owners.values.map { it.onNetworkSwitch }
+            }
+            if (!firstOwner) return@withLock
+            // §119 — seed `defaultNetwork` из getActiveNetwork(), но НИКОГДА не нашим
+            // же VPN. getActiveNetwork() возвращает per-app default, который штатно
+            // ВКЛЮЧАЕТ наш tun, если VPN уже поднят к моменту start() (док:
+            // ConnectivityManager.getActiveNetwork / registerDefaultNetworkCallback —
+            // «may be ... a VPN that applies to the application»). Если пустить такой
+            // seed в LocalResolver, DnsResolver.query(VPN) уйдёт обратно в tun → loop.
+            // NOT_VPN из NetworkRequest сюда НЕ применяется (это прямой геттер, не
+            // запрос), поэтому фильтруем явно. Callback-источник (ниже) уже отфильтрован
+            // NOT_VPN'ом самого NetworkRequest и здесь перезапишет seed.
+            defaultNetwork = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                BoxApplication.connectivity.activeNetwork?.takeUnless(::isVpn)
+            } else null
+            logDefaultNetwork("init", defaultNetwork)
 
-        DefaultNetworkListener.start(this) {
-            defaultNetwork = it
-            checkUpdate(it)
-        }
+            DefaultNetworkListener.start(this) {
+                defaultNetwork = it
+                checkUpdate(it)
+            }
 
-        if (defaultNetwork == null && Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            defaultNetwork = DefaultNetworkListener.get()
+            if (defaultNetwork == null && Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+                defaultNetwork = DefaultNetworkListener.get()
+            }
         }
     }
 
-    suspend fun stop() {
-        DefaultNetworkListener.stop(this)
-        resetJob?.cancel()
-        resetJob = null
-        onNetworkSwitch = null
-        lastIfName = null
-        scope = null
-        listener = null
+    suspend fun stop(owner: Any) {
+        lifecycleMutex.withLock {
+            val removed = synchronized(owners) {
+                val removed = owners.remove(owner) != null
+                onNetworkSwitch = owners.values.map { it.onNetworkSwitch }
+                removed
+            }
+            if (!removed) return@withLock
+            if (synchronized(owners) { owners.isNotEmpty() }) return@withLock
+            DefaultNetworkListener.stop(this)
+            resetJob?.cancel()
+            resetJob = null
+            onNetworkSwitch = emptyList()
+            lastIfName = null
+        }
     }
 
-    fun setListener(listener: InterfaceUpdateListener?) {
-        this.listener = listener
-        if (listener != null) notifySync(defaultNetwork, listener)
+    fun setListener(listener: InterfaceUpdateListener) {
+        if (listeners.add(listener)) notifySync(defaultNetwork, listener)
+    }
+
+    fun removeListener(listener: InterfaceUpdateListener) {
+        listeners.remove(listener)
     }
 
     /// §141 P1.1b — JNI no-throw (§050/§128): `notifySync` вызывается из
@@ -115,14 +163,15 @@ object DefaultNetworkMonitor {
     }
 
     private fun checkUpdate(network: Network?) {
-        val l = listener ?: return
-        val s = scope ?: return  // service already dead — don't touch Go objects
+        val targets = listeners.snapshot()
+        if (targets.isEmpty()) return
+        val s = synchronized(owners) { owners.values.firstOrNull { it.scope.isActive }?.scope } ?: return
         if (network == null) {
             // §087 — disconnect: НЕ трогаем lastIfName (сохраняем baseline, чтобы
             // switch через "" к ДРУГОМУ интерфейсу всё равно детектился) и НЕ
             // ресетим (нет сети для re-dial).
             s.launch(Dispatchers.IO) {
-                runCatching { l.updateDefaultInterface("", -1, false, false) }
+                targets.forEach { listener -> notifyIfRegistered(listener, "", -1, false) }
             }
             return
         }
@@ -132,16 +181,27 @@ object DefaultNetworkMonitor {
         for (attempt in 0 until 10) {
             try {
                 val ni = NetworkInterface.getByName(ifName) ?: continue
-                maybeResetOnSwitch(ifName, s)  // §087
+                maybeResetOnSwitch(ifName, s)
                 lastIfName = ifName
                 val metered = isMetered(network)
                 s.launch(Dispatchers.IO) {
-                    runCatching { l.updateDefaultInterface(ifName, ni.index, metered, false) }
+                    targets.forEach { listener -> notifyIfRegistered(listener, ifName, ni.index, metered) }
                 }
                 return
             } catch (_: Exception) {
                 Thread.sleep(100)
             }
+        }
+    }
+
+    private fun notifyIfRegistered(
+        listener: InterfaceUpdateListener,
+        interfaceName: String,
+        interfaceIndex: Int,
+        metered: Boolean,
+    ) {
+        if (listeners.contains(listener)) {
+            runCatching { listener.updateDefaultInterface(interfaceName, interfaceIndex, metered, false) }
         }
     }
 
@@ -159,7 +219,7 @@ object DefaultNetworkMonitor {
         resetJob?.cancel()
         resetJob = s.launch(Dispatchers.IO) {
             delay(RESET_DEBOUNCE_MS)
-            runCatching { onNetworkSwitch?.invoke() }
+            onNetworkSwitch.forEach { callback -> runCatching { callback() } }
         }
     }
 

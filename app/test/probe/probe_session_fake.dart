@@ -2,21 +2,25 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 
-/// §669 — Dart-двойник `ProbeSession.kt` для тестов: владелец сессии (runId),
-/// «stale run» на чужой id, `probeCancel` обрывает начатые замеры, новый
-/// `probeStart` закрывает старую сессию. Замеры по умолчанию висят (dial не
-/// возвращается), пока их не отпустит отмена, закрытие сессии или тест.
+/// §669 — Dart-двойник `ProbeSession.kt`: до двух независимых сессий, stale-id
+/// no-op и отмена начатых замеров только своего runId.
 class FakeProbeSession {
+  FakeProbeSession({this.capacity = 2});
+
+  final int capacity;
   final calls = <MethodCall>[];
 
   int _nextId = 0;
-  int? live;
-  bool _liveCancelled = false;
+  final _sessions = <int, _FakeSession>{};
+
+  List<int> get liveRunIds => _sessions.keys.toList();
+  int? get live => liveRunIds.lastOrNull;
 
   /// Замер живой сессии висит, пока его не отпустят.
   bool holdUrlTests = true;
-  final _pending = <Completer<Map<String, Object>>>[];
-  int get pendingCount => _pending.length;
+  final _pending = <int, List<Completer<Map<String, Object>>>>{};
+  int get pendingCount =>
+      _pending.values.fold(0, (count, list) => count + list.length);
 
   /// Не-null — `probeStop` своей сессии ждёт его (долгий `closeService`).
   Completer<void>? stopGate;
@@ -30,7 +34,7 @@ class FakeProbeSession {
 
   /// Отпустить висящие замеры успехом.
   void releaseOk({int delay = 50}) =>
-      _release({'delay': delay, 'error': ''});
+      _releaseAll({'delay': delay, 'error': ''});
 
   Future<Object?> handle(MethodCall call) async {
     calls.add(call);
@@ -38,46 +42,55 @@ class FakeProbeSession {
     final runId = (args['runId'] as int?) ?? 0;
     switch (call.method) {
       case 'probeStart':
-        _closeLive();
-        live = ++_nextId;
-        _liveCancelled = false;
-        return {'error': '', 'runId': live};
-      case 'probeUrlTest':
-        if (live == null) {
-          return {'delay': 0, 'error': 'probe session not running'};
+        if (_sessions.length >= capacity) {
+          return {'error': 'probe session capacity reached', 'runId': 0};
         }
-        if (runId != live) return {'delay': 0, 'error': 'stale run'};
-        if (_liveCancelled) return {'delay': 0, 'error': 'probe run cancelled'};
+        final id = ++_nextId;
+        _sessions[id] = _FakeSession();
+        return {'error': '', 'runId': id};
+      case 'probeUrlTest':
+        final session = _sessions[runId];
+        if (session == null) return {'delay': 0, 'error': 'stale run'};
+        if (session.cancelled) {
+          return {'delay': 0, 'error': 'probe run cancelled'};
+        }
         if (!holdUrlTests) return {'delay': 50, 'error': ''};
         final c = Completer<Map<String, Object>>();
-        _pending.add(c);
+        _pending.putIfAbsent(runId, () => []).add(c);
         return c.future;
       case 'probeCancel':
-        if (runId == live) {
-          _liveCancelled = true;
-          _release({'delay': 0, 'error': 'context canceled'});
+        final session = _sessions[runId];
+        if (session != null) {
+          session.cancelled = true;
+          _releaseRun(runId, {'delay': 0, 'error': 'context canceled'});
         }
         return null;
       case 'probeStop':
-        if (live != null && runId != live) return null; // stale → no-op
+        final session = _sessions.remove(runId);
+        if (session == null) return null;
         final gate = stopGate;
         if (gate != null) await gate.future;
-        _closeLive();
+        _releaseRun(runId, {'delay': 0, 'error': 'probe session closed'});
         return null;
     }
     return null;
   }
 
-  void _closeLive() {
-    _release({'delay': 0, 'error': 'probe session closed'});
-    live = null;
-  }
-
-  void _release(Map<String, Object> r) {
-    final list = List.of(_pending);
-    _pending.clear();
-    for (final c in list) {
-      c.complete(r);
+  void _releaseAll(Map<String, Object> result) {
+    final ids = _pending.keys.toList();
+    for (final id in ids) {
+      _releaseRun(id, result);
     }
   }
+
+  void _releaseRun(int runId, Map<String, Object> result) {
+    final list = _pending.remove(runId) ?? const [];
+    for (final c in list) {
+      c.complete(result);
+    }
+  }
+}
+
+class _FakeSession {
+  bool cancelled = false;
 }

@@ -365,18 +365,26 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Android SDK Platform 37
+      - name: Go 1.26.10
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.10"
+          cache: false
+
+      - name: Android SDK Platform 37 and pinned NDK
         # §721 — compileSdk 37 (androidx.appfunctions). AGP 9.1 сам докачивает
         # платформу, но в том же прогоне её не находит («Failed to find target
-        # with hash string 'android-37'»); ставим заранее. Есть — no-op.
-        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-37.0" > /dev/null
+        # with hash string 'android-37'»); ставим заранее. Версия NDK совпадает
+        # с experimental/libbox/ffi.json закреплённого core-коммита.
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-37.0" "ndk;28.0.13004108" > /dev/null
 
-      - name: Fetch sing-box-lx core (libbox.aar)
-        # §104 — ядро: fork Leadaxe/sing-box-lx (AWG2 + XHTTP). AAR не в git;
-        # скачиваем из GH Releases форка с проверкой SHA256. Пин версии —
-        # app/android/libbox.version (single source для local + CI).
+      - name: Build patched sing-box-lx core (libbox.aar)
+        # §748 — release AAR не содержит per-instance command API. Собираем
+        # закреплённый core commit + ops/core/parallel-probes.patch; скрипт
+        # сначала запускает core-тесты, затем кладёт AAR в тот самый libs/,
+        # который потребляет app/build.gradle.kts.
         working-directory: .
-        run: ./scripts/fetch-libbox.sh
+        run: ./scripts/build-libbox.sh
 
       - name: Flutter version pin
         id: flutter_pin

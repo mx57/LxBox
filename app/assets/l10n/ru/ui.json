@@ -3789,6 +3789,9 @@
   "Packet encoding \"%s\" is not one the core knows (xudp, packetaddr), so it was dropped — keeping it would crash the core.": {
     "value": "Упаковка пакетов «%s» ядру неизвестна (оно знает xudp и packetaddr), поэтому отброшена: иначе ядро аварийно завершилось бы."
   },
+  "Parallel probe batches": {
+    "value": "Параллельные пробные батчи"
+  },
   "Parallel — race every query": {
     "value": "Parallel — каждый запрос гонкой"
   },
@@ -4394,6 +4397,9 @@
   },
   "Run URLTest": {
     "value": "Запустить URLTest"
+  },
+  "Run two independent probe sessions at once; the ordinary server scanner stays serial": {
+    "value": "Две независимые пробные сессии одновременно; обычный сканер серверов остаётся последовательным"
   },
   "Running…": {
     "value": "Выполняется…"

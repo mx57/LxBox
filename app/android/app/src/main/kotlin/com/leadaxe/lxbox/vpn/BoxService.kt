@@ -591,7 +591,7 @@ class BoxService(
         // §087 — на genuine смену интерфейса (WiFi↔LTE) дёргаем resetNetwork()
         // (ядро CloseAll + flush DNS + rebind): закрывает стейл-сокеты на мёртвом
         // NIC, иначе app виснет на них до TCP-таймаута. См. docs/spec/tasks/087.
-        DefaultNetworkMonitor.start(serviceScope) {
+        DefaultNetworkMonitor.start(this, serviceScope) {
             Log.d(TAG, "[vpn] interface switch → resetNetwork()")
             lastResetNetworkAt = SystemClock.elapsedRealtime()
             runCatching { commandServer.get()?.resetNetwork() }
@@ -772,10 +772,9 @@ class BoxService(
     /// §049 F1 — `CommandServer(handler=this, platform=platformInterface)`
     /// с двумя разными Java instances (port из reference 1.13.11).
     private fun startCommandServer() {
-        // §236 — VPN приоритетнее probe-сессии: если юзер запускает туннель
-        // при живом Test servers, глушим probe (он держит command.sock —
-        // второй CommandServer на том же basePath не поднимется).
-        runCatching { ProbeSession.stop() }
+        // §236 — VPN приоритетнее probe-сессий: закрываем все принадлежащие
+        // evaluator'у run ID до создания командного сервера VPN.
+        runCatching { ProbeSession.stopAll() }
         val cs = CommandServer(this, platformInterface)
         cs.start()
         commandServer.set(cs)
@@ -808,7 +807,7 @@ class BoxService(
             trace.mark(stopSnapshot())
             trace.step("closeFileDescriptor", 3_000) { closeFileDescriptor("doStop") }
             trace.step("DefaultNetworkMonitor.stop", 3_000) {
-                runBlocking { DefaultNetworkMonitor.stop() }
+                runBlocking { DefaultNetworkMonitor.stop(this@BoxService) }
             }
             trace.step("closeCommandServer", 20_000) { closeCommandServerAtomic("doStop", trace) }
 
@@ -907,7 +906,7 @@ class BoxService(
             trace.mark(stopSnapshot())
             trace.step("closeFileDescriptor", 2_000) { closeFileDescriptor("doForceStop") }
             trace.step("DefaultNetworkMonitor.stop", 2_000) {
-                runBlocking { DefaultNetworkMonitor.stop() }
+                runBlocking { DefaultNetworkMonitor.stop(this@BoxService) }
             }
             trace.step("closeCommandServer", 2_000) { closeCommandServerAtomic("doForceStop", trace) }
             withContext(Dispatchers.Main) {
@@ -935,7 +934,7 @@ class BoxService(
         // serviceScope.launch (мы уже в suspend) и с error message в
         // `setStatus(Stopped)` вместо silent stop.
         closeFileDescriptor("stopAndAlert")
-        DefaultNetworkMonitor.stop()
+        DefaultNetworkMonitor.stop(this)
         closeCommandServerAtomic("stopAndAlert: $message")
 
         withContext(Dispatchers.Main) {

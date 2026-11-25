@@ -1,6 +1,7 @@
 package com.leadaxe.lxbox.vpn
 
 import android.util.Log
+import java.io.File
 
 /**
  * §703 — страховка от «initialize cache-file: timeout» на старте ядра.
@@ -43,19 +44,23 @@ object CacheDbLockRetry {
     /// Выполнить [start]; на [isLockTimeout] — удалить `cache.db` и повторить
     /// ровно один раз. Любая другая ошибка и ошибка повтора уходят вызывающему
     /// как есть — его обработка отказа старта не меняется.
-    inline fun <T> startOrRetry(where: String, start: () -> T): T {
+    inline fun <T> startOrRetry(where: String, cacheDbFile: File? = null, start: () -> T): T {
         return try {
             start()
         } catch (t: Throwable) {
             if (!isLockTimeout(t)) throw t
-            onLockTimeout(where, t)
+            onLockTimeout(where, t, cacheDbFile)
             start()
         }
     }
 
     @PublishedApi
-    internal fun onLockTimeout(where: String, t: Throwable) {
+    internal fun onLockTimeout(where: String, t: Throwable, cacheDbFile: File?) {
         Log.w(TAG, "[$where] start failed on cache.db lock (${t.message}) → delete cache.db, retry once")
-        BoxVpnService.deleteCacheDbFile()
+        if (cacheDbFile == null) {
+            BoxVpnService.deleteCacheDbFile()
+        } else {
+            cacheDbFile.delete()
+        }
     }
 }

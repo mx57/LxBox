@@ -20,6 +20,7 @@
 // «чем разрешается имя за узлом» — и это единственный ген, влияющий на конфиг, а
 // не на тело узла, поэтому он реализуется отдельно ([_withDns]).
 
+import 'dart:async';
 import 'dart:convert';
 
 import '../../models/dns_ref.dart';
@@ -45,6 +46,8 @@ import 'engine.dart';
 import 'genome.dart';
 import 'objectives.dart';
 
+typedef _ProbeBatch = ({ProbeConfig config, List<int> indexes, String dnsTag});
+
 /// Оценка геномов через ядро. Один экземпляр переживает несколько прогонов:
 /// аккаунты и версия ядра кэшируются в [prepare], а probe-сессия живёт только
 /// внутри одного ранга.
@@ -54,6 +57,7 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
     this.pool,
     this.wgKeepalive = 0,
     this.timeout = const Duration(seconds: 8),
+    this.parallelProbes = false,
     CcChannel? cc,
     BoxVpnClient? vpn,
     WarpClient? warp,
@@ -71,6 +75,9 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
   /// Таймаут одного probeGetUrl.
   final Duration timeout;
 
+  /// Не более двух независимых probe-сессий; попытки одной особи последовательны.
+  final bool parallelProbes;
+
   final CcChannel _cc;
   final BoxVpnClient _vpn;
   final WarpClient? _warp;
@@ -85,8 +92,8 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
   bool _warpPrepared = false;
   bool _stopped = false;
 
-  /// §669 — runId текущей probe-сессии (0, если не поднята).
-  int _runId = 0;
+  /// §669 — сессии, поднятые этим оценщиком. Каждый батч несёт свой runId.
+  final _ownedRunIds = <int>{};
 
   @override
   Future<String?> prepare() => prepareFor(const []);
@@ -95,9 +102,8 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
   Future<String?> prepareFor(List<Genome> genomes) async {
     final needsWarp = genomes.any((g) => !g.isVerbatim);
     if (_prepared && (!needsWarp || _warpPrepared)) return null;
-    // Probe-сессия и боевой туннель в одном процессе не уживаются (два
-    // CommandServer невозможны, §236) — поэтому эволюция идёт только на
-    // выключенном VPN, и это надо сказать пользователю прямо.
+    // Probe-сессия и боевой туннель в одном процессе не уживаются — поэтому
+    // эволюция идёт только на выключенном VPN, и это надо сказать пользователю прямо.
     try {
       final status = await _vpn.getVpnStatus();
       log.i('evo', 'VPN status: $status');
@@ -220,47 +226,23 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
       byDnsTag.putIfAbsent(genomes[i].dnsTag, () => []).add(i);
     }
 
+    final jobs = <_ProbeBatch>[];
+    final why = <int, String>{};
     for (final group in byDnsTag.entries) {
       if (stopped()) break;
       final indexes = group.value;
-      // Позиции СОХРАНЯЮТСЯ: `tagByIndex` ключуется позицией во входящем списке
-      // (см. `buildProbeBatches`), а до этого сюда попадал сжатый список узлов —
-      // и после первого же несобранного узла вердикты уезжали на чужие геномы.
+      // Позиции СОХРАНЯЮТСЯ: `tagByIndex` ключуется позицией во входящем списке,
+      // а не позицией в сжатом списке узлов.
       final nodes = <NodeSpec?>[
         for (final i in indexes) _buildNode(genomes[i]),
       ];
-      // Причина «вердикта нет» на каждую особь: её знает гард реестра
-      // (`brokenByIndex`), а без него — наш билдер или сорванный probeStart.
-      // Молча оставить особь без пробы нельзя: «не проверена» неотличима от
-      // «не прошла», а именно это и выглядело как «проходимых 0 при рабочих
-      // конфигах».
-      final why = <int, String>{};
       for (var k = 0; k < indexes.length; k++) {
         if (nodes[k] != null) continue;
         final i = indexes[k];
         why[i] = 'node build failed';
         log.w('evo', '${genomes[i].shortLabel}: узел не собрался');
       }
-      void closeUnprobed() {
-        for (final i in indexes) {
-          if (out[i].isNotEmpty) continue;
-          final reason = why[i] ??
-              ((budgetExceeded?.call() ?? false)
-                  ? 'budget exhausted'
-                  : (stopped()
-                      ? 'cancelled before probe'
-                      : 'no probe slot in session'));
-          final o = Observation.failed(reason, requests: 0);
-          out[i].add(o);
-          onOne?.call(i, o);
-          log.w('evo', '${genomes[i].shortLabel}: пробы не было (${o.error})');
-        }
-      }
-
-      if (nodes.every((n) => n == null)) {
-        closeUnprobed();
-        continue;
-      }
+      if (nodes.every((n) => n == null)) continue;
 
       final batches = buildProbeBatches(
         nodes,
@@ -268,9 +250,7 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
         vars: _vars,
       );
       for (final cfg in batches) {
-        if (stopped()) break;
-        // Вердикт гарда реестра (битый emit, неподдерживаемый тип ядром) — его
-        // раньше не видно вовсе.
+        // Вердикт гарда реестра (битый emit, неподдерживаемый тип ядром).
         cfg.brokenByIndex.forEach((k, reason) {
           if (k >= indexes.length) return;
           final i = indexes[k];
@@ -278,51 +258,101 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
           log.w('evo', '${genomes[i].shortLabel}: $reason');
         });
         final json = cfg.configJson;
-        if (json == null) continue;
-        final started = await _cc.probeStart(_withDns(json, group.key));
-        final err = started.error;
-        if (!started.ok) {
-          log.e('evo', 'probeStart failed: $err');
-          // Сессия не поднялась — это ТЕХНИЧЕСКИЙ сбой, а не «проходимость 0»:
-          // различать их важно, иначе эволюция похоронит живых кандидатов.
-          // Следующий батч всё равно пробуем, поэтому вердикт ставится только
-          // тем, кто к концу группы так и не будет проверен.
-          for (final i in indexes) {
-            why.putIfAbsent(i, () => 'probe session: $err');
-          }
-          continue;
-        }
-        _runId = started.runId;
-        log.i('evo', 'probe session up: ${cfg.tagByIndex.length} tags');
-        try {
-          for (final slot in cfg.tagByIndex.entries) {
-            if (stopped()) break;
-            if (slot.key >= indexes.length) continue;
-            final i = indexes[slot.key];
-            final g = genomes[i];
-            for (var a = 0; a < attempts; a++) {
-              if (stopped()) break;
-              final o = await _probeSeries(g, slot.value);
-              out[i].add(o);
-              onOne?.call(i, o);
-            }
-          }
-        } finally {
-          await _cc.probeStop(_runId);
+        if (json != null) {
+          jobs.add((config: cfg, indexes: indexes, dnsTag: group.key));
         }
       }
-      closeUnprobed();
+    }
+
+    Future<void> runBatch(_ProbeBatch job) async {
+      if (stopped()) return;
+      final cfg = job.config;
+      final started = await _cc.probeStart(_withDns(cfg.configJson!, job.dnsTag));
+      if (!started.ok) {
+        final err = started.error;
+        log.e('evo', 'probeStart failed: $err');
+        for (final i in job.indexes) {
+          why.putIfAbsent(i, () => 'probe session: $err');
+        }
+        return;
+      }
+      final runId = started.runId;
+      _ownedRunIds.add(runId);
+      log.i('evo', 'probe session up: ${cfg.tagByIndex.length} tags');
+      try {
+        if (stopped()) return;
+        for (final slot in cfg.tagByIndex.entries) {
+          if (stopped()) break;
+          if (slot.key >= job.indexes.length) continue;
+          final i = job.indexes[slot.key];
+          final g = genomes[i];
+          for (var a = 0; a < attempts; a++) {
+            if (stopped()) break;
+            final o = await _probeSeries(g, slot.value, runId);
+            out[i].add(o);
+            onOne?.call(i, o);
+          }
+        }
+      } finally {
+        await _stopRun(runId);
+      }
+    }
+
+    if (parallelProbes) {
+      final iterator = jobs.iterator;
+      Future<void> worker() async {
+        while (!stopped() && iterator.moveNext()) {
+          await runBatch(iterator.current);
+        }
+      }
+      await Future.wait([worker(), worker()]);
+    } else {
+      for (final job in jobs) {
+        if (stopped()) break;
+        await runBatch(job);
+      }
+    }
+
+    for (var i = 0; i < genomes.length; i++) {
+      if (out[i].isNotEmpty) continue;
+      final reason = why[i] ??
+          ((budgetExceeded?.call() ?? false)
+              ? 'budget exhausted'
+              : (stopped() ? 'cancelled before probe' : 'no probe slot in session'));
+      final o = Observation.failed(reason, requests: 0);
+      out[i].add(o);
+      onOne?.call(i, o);
+      log.w('evo', '${genomes[i].shortLabel}: пробы не было (${o.error})');
     }
     return out;
   }
 
+  Future<void> _stopRun(int runId) async {
+    try {
+      await _cc.probeStop(runId);
+    } catch (e) {
+      log.w('evo', 'probeStop $runId failed: $e');
+    } finally {
+      _ownedRunIds.remove(runId);
+    }
+  }
+
+  void _cancelOwned() {
+    for (final runId in _ownedRunIds.toList()) {
+      unawaited(_cc.probeCancel(runId).catchError((Object e) {
+        log.w('evo', 'probeCancel $runId failed: $e');
+      }));
+    }
+  }
+
   /// Одна проба = СЕРИЯ GET'ов по источникам гео (см. [probeGeoSeries]).
   /// Страна берётся из `colo`, RTT — `elapsedMs` ядра.
-  Future<Observation> _probeSeries(Genome g, String tag) => probeGeoSeries(
+  Future<Observation> _probeSeries(Genome g, String tag, int runId) =>
+      probeGeoSeries(
         g,
         (url) => _cc.probeGetUrl(
           tag,
-          runId: _runId,
+          runId: runId,
           link: url,
           timeoutMs: timeout.inMilliseconds,
           maxBytes: 4096,
@@ -422,16 +452,17 @@ class ProbeGenomeEvaluator implements GenomeEvaluator {
     _builder = null;
     _prepared = false;
     _warpPrepared = false;
-    try {
-      await _cc.probeStop(_runId);
-    } catch (_) {
-      // Идемпотентно: сессии могло и не быть (probeStart не вызывался).
-    }
-    _runId = 0;
+    _cancelOwned();
+    await Future.wait([
+      for (final runId in _ownedRunIds.toList()) _stopRun(runId),
+    ]);
   }
 
   /// Немедленная остановка (UI при закрытии экрана; движок использует `cancel`).
-  void stop() => _stopped = true;
+  void stop() {
+    _stopped = true;
+    _cancelOwned();
+  }
 }
 
 /// Источники гео (§844): ротация по списку — сначала JSON-мета

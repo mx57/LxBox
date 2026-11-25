@@ -319,6 +319,7 @@ class _EvolutionScreenState extends State<EvolutionScreen>
         'warp=${_seeds.warpCount} private=${_seeds.privateCount} '
         'pop=${_settings.populationSize} gens=${_settings.maxGenerations} '
         'budget=${_settings.maxRequests} rungs=${_settings.rungAttempts.join(",")} '
+        'parallel=${_settings.parallelProbes} '
         'eda=${_settings.useEda} seed=${_settings.seed}');
 
     final evaluator = _evaluator ??= ProbeGenomeEvaluator(
@@ -326,6 +327,7 @@ class _EvolutionScreenState extends State<EvolutionScreen>
       pool: _assetPool,
       wgKeepalive: _assetPool?.wgKeepalive ?? 0,
       timeout: _settings.requestTimeout,
+      parallelProbes: _settings.parallelProbes,
     );
     final engine = EvolutionEngine(
       evaluator: evaluator,
@@ -458,6 +460,7 @@ class _EvolutionScreenState extends State<EvolutionScreen>
 
   void _stop() {
     _engine?.cancel();
+    _evaluator?.stop();
     setState(() => _statusKey = 'stopping');
   }
 
@@ -2081,6 +2084,13 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                       "Hard stop: every verdict costs up to 3 HTTP probes — the geo check rotates sources"),
                 ),
                 _costLine(cs, cost),
+                _switch(cs,
+                    label: getLocalText.s("Parallel probe batches"),
+                    value: _s.parallelProbes,
+                    onChanged: (v) =>
+                        _patch((s) => s.copyWith(parallelProbes: v)),
+                    hint: getLocalText.s(
+                        "Run two independent probe sessions at once; the ordinary server scanner stays serial")),
                 _slider(
                   cs,
                   label: getLocalText.s("Elite fraction"),
@@ -2486,11 +2496,15 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   Widget _switch(ColorScheme cs,
           {required String label,
           required bool value,
-          required ValueChanged<bool> onChanged}) =>
+          required ValueChanged<bool> onChanged,
+          String? hint}) =>
       SwitchListTile.adaptive(
         dense: true,
         contentPadding: EdgeInsets.zero,
         title: Text(label, style: const TextStyle(fontSize: 12)),
+        subtitle: hint == null
+            ? null
+            : Text(hint, style: const TextStyle(fontSize: 10.5)),
         value: value,
         onChanged: onChanged,
       );

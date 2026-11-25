@@ -3537,6 +3537,9 @@
   "Packet encoding \"%s\" is not one the core knows (xudp, packetaddr), so it was dropped — keeping it would crash the core.": {
     "value": "数据包编码「%s」不是内核支持的取值（xudp、packetaddr），已丢弃——保留会导致内核崩溃。"
   },
+  "Parallel probe batches": {
+    "value": "并行探测批次"
+  },
   "Parallel — race every query": {
     "value": "并行 —— 每个查询都并发竞速"
   },
@@ -4133,6 +4136,9 @@
   },
   "Run URLTest": {
     "value": "运行 URLTest"
+  },
+  "Run two independent probe sessions at once; the ordinary server scanner stays serial": {
+    "value": "同时运行两个独立的探测会话；普通服务器扫描器仍按顺序运行"
   },
   "Running…": {
     "value": "运行中…"

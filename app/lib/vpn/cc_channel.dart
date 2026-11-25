@@ -719,8 +719,7 @@ class CcChannel {
   ///
   /// §669 — [CcProbeStart.runId] — владелец сессии: остальные probe-вызовы
   /// несут его, а с чужим/устаревшим id ничего не делают ([kProbeStaleRun]).
-  /// Новый старт поверх живой сессии её закрывает — старый прогон уже не
-  /// может закрыть новую.
+  /// Одновременно живы не более двух сессий; новая не вытесняет старую.
   Future<CcProbeStart> probeStart(String config) async {
     final r = await _methods.invokeMethod<Map<dynamic, dynamic>>('probeStart', {
       'config': config,
@@ -2017,8 +2016,8 @@ class CcDelayResult {
   );
 }
 
-/// §669 — ответ probe-сессии на вызов с чужим/устаревшим runId: прогон вытеснен
-/// новым (`ProbeSession.STALE_RUN` на Kotlin-стороне, сверка дословная).
+/// §669 — ответ probe-сессии на вызов с чужим/устаревшим runId: сессии уже
+/// нет ([ProbeSession.STALE_RUN] на Kotlin-стороне, сверка дословная).
 const kProbeStaleRun = 'stale run';
 
 /// §669 — результат `probeStart`: [error] '' при успехе, иначе текст ошибки;

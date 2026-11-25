@@ -23,6 +23,7 @@ class EvolutionSettings {
     this.populationSize = 16,
     this.maxGenerations = 8,
     this.maxRequests = 1080,
+    this.parallelProbes = false,
     this.rungAttempts = const [1, 2, 3],
     this.rungKeepFraction = 0.5,
     this.eliteFraction = 0.35,
@@ -64,6 +65,10 @@ class EvolutionSettings {
   /// гео (§844), поэтому один вердикт стоит до трёх запросов. Потолок,
   /// посчитанный от вердиктов, обрезал бы кампании на трети поколений.
   final int maxRequests;
+
+  /// Разрешить две независимые probe-сессии для параллельных батчей. Обычный
+  /// сканнер и старые настройки остаются последовательными.
+  final bool parallelProbes;
 
   /// Successive halving: попытки на ранг. `[1, 2, 3]` = каждый кандидат
   /// получает 1 пробу, выжившие — ещё 2 (итого 3), финалисты — ещё 3 (итого 6).
@@ -141,6 +146,7 @@ class EvolutionSettings {
     int? populationSize,
     int? maxGenerations,
     int? maxRequests,
+    bool? parallelProbes,
     List<int>? rungAttempts,
     double? rungKeepFraction,
     double? eliteFraction,
@@ -164,6 +170,7 @@ class EvolutionSettings {
         populationSize: populationSize ?? this.populationSize,
         maxGenerations: maxGenerations ?? this.maxGenerations,
         maxRequests: maxRequests ?? this.maxRequests,
+        parallelProbes: parallelProbes ?? this.parallelProbes,
         rungAttempts: rungAttempts ?? this.rungAttempts,
         rungKeepFraction: rungKeepFraction ?? this.rungKeepFraction,
         eliteFraction: eliteFraction ?? this.eliteFraction,
@@ -188,6 +195,7 @@ class EvolutionSettings {
         'populationSize': populationSize,
         'maxGenerations': maxGenerations,
         'maxRequests': maxRequests,
+        'parallelProbes': parallelProbes,
         'rungAttempts': rungAttempts,
         'rungKeepFraction': rungKeepFraction,
         'eliteFraction': eliteFraction,
@@ -219,6 +227,7 @@ class EvolutionSettings {
       populationSize: _int(j['populationSize'], 16),
       maxGenerations: _int(j['maxGenerations'], 8),
       maxRequests: _int(j['maxRequests'], 1080),
+      parallelProbes: j['parallelProbes'] == true,
       rungAttempts: rungs.isEmpty ? const [1, 2, 3] : rungs,
       rungKeepFraction: _double(j['rungKeepFraction'], 0.5),
       eliteFraction: _double(j['eliteFraction'], 0.35),

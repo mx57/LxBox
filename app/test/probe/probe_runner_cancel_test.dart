@@ -90,7 +90,8 @@ void main() {
     final newDone = newRunner.run(nodes,
         url: '', timeoutMs: 0, onResult: (i, r) => newResults[i] = r);
 
-    // Старый доходит до finally: его probeStop(1) — no-op для сессии 2.
+    // Старый прогон отменяет только свою сессию и доходит до finally.
+    oldRunner.cancel();
     expect(await oldDone.timeout(const Duration(seconds: 2)), '');
     expect(fake.runIdsOf('probeStop'), contains(1));
     expect(fake.live, 2, reason: 'сессия нового прогона жива');
@@ -105,6 +106,50 @@ void main() {
     expect(newResults.length, 8);
     expect(newResults.values.every((r) => r.status == ProbeStatus.ok), isTrue);
     expect(fake.runIdsOf('probeStop').last, 2);
+    expect(fake.live, isNull);
+  });
+
+  test('третья probe-сессия не вытесняет две живые', () async {
+    Future<Object?> start() => fake.handle(
+          const MethodCall('probeStart', {'config': '{}'}),
+        );
+    expect((await start() as Map)['runId'], 1);
+    expect((await start() as Map)['runId'], 2);
+    final rejected = await start() as Map;
+    expect(rejected['error'], 'probe session capacity reached');
+    expect(rejected['runId'], 0);
+    expect(fake.liveRunIds, [1, 2]);
+  });
+
+  test('cancel и stale stop затрагивают только свой runId', () async {
+    await fake.handle(const MethodCall('probeStart', {'config': '{}'}));
+    await fake.handle(const MethodCall('probeStart', {'config': '{}'}));
+    MethodCall url(int runId) => MethodCall('probeUrlTest', {
+          'runId': runId,
+          'tag': 'n1',
+          'link': 'https://example.com/gen204',
+          'timeoutMs': 5000,
+        });
+    final first = fake.handle(url(1));
+    final second = fake.handle(url(2));
+    await _until(() => fake.pendingCount == 2, what: 'две независимые пробы');
+
+    await fake.handle(const MethodCall('probeCancel', {'runId': 1}));
+    expect(await first, {'delay': 0, 'error': 'context canceled'});
+    expect(fake.pendingCount, 1);
+    expect(fake.liveRunIds, [1, 2]);
+    expect(await fake.handle(url(1)), {'delay': 0, 'error': 'probe run cancelled'});
+
+    await fake.handle(const MethodCall('probeStop', {'runId': 99}));
+    await fake.handle(const MethodCall('probeCancel', {'runId': 99}));
+    expect(fake.liveRunIds, [1, 2]);
+
+    fake.holdUrlTests = false;
+    fake.releaseOk();
+    expect(await second, {'delay': 50, 'error': ''});
+    await fake.handle(const MethodCall('probeStop', {'runId': 1}));
+    expect(fake.liveRunIds, [2]);
+    await fake.handle(const MethodCall('probeStop', {'runId': 2}));
     expect(fake.live, isNull);
   });
 }

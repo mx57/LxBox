@@ -18,6 +18,7 @@ void main() {
     populationSize: 24,
     maxGenerations: 5,
     maxRequests: 900,
+    parallelProbes: true,
     rungAttempts: [1, 3],
     rungKeepFraction: 0.4,
     eliteFraction: 0.25,
@@ -62,6 +63,7 @@ void main() {
       ),
     );
     expect(s.rungAttempts, isNotEmpty);
+    expect(s.parallelProbes, isFalse);
     expect(s.transports, EvoTransport.values.toSet());
     expect(s.awgProfiles, {AwgProfile.warp15});
     expect(s.disabledLoci, isEmpty);
@@ -76,6 +78,7 @@ void main() {
     expect(back.disabledLoci, {EvoLocus.mtu, EvoLocus.dns});
     expect(back.locusEnabled(EvoLocus.mtu), isFalse);
     expect(back.useEda, isFalse);
+    expect(back.parallelProbes, isTrue);
     expect(back.requestTimeout, const Duration(seconds: 3));
     expect(back.countries, ['de', 'nl']);
   });
@@ -86,6 +89,7 @@ void main() {
     // Дефолт бюджета = полный прогон по дефолтам с худшим множителем на вердикт
     // (проба чередует 3 источника гео, §844) — иначе потолок режет кампанию.
     expect(empty.maxRequests, 1080);
+    expect(empty.parallelProbes, isFalse);
     expect(
       empty.transports,
       EvoTransport.values.toSet(),

@@ -6,20 +6,23 @@ import io.nekohasekai.libbox.CommandClientHandler
 import io.nekohasekai.libbox.CommandClientOptions
 import io.nekohasekai.libbox.CommandServer
 import io.nekohasekai.libbox.CommandServerHandler
+import io.nekohasekai.libbox.CommandServerOptions
 import io.nekohasekai.libbox.ConnectionEvents
 import io.nekohasekai.libbox.DnsQuery
 import io.nekohasekai.libbox.LogIterator
+import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.libbox.OutboundGroupIterator
 import io.nekohasekai.libbox.OutboundGroupItemIterator
 import io.nekohasekai.libbox.OverrideOptions
 import io.nekohasekai.libbox.StatusMessage
 import io.nekohasekai.libbox.StringIterator
 import io.nekohasekai.libbox.SystemProxyStatus
+import java.io.File
+import java.security.SecureRandom
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,13 +32,10 @@ import kotlinx.coroutines.runBlocking
 /// §236 — headless probe-сессия: ВРЕМЕННЫЙ CommandServer + конфиг БЕЗ tun,
 /// чтобы гонять `urlTestOutbound` по нодам папки, пока VPN ВЫКЛЮЧЕН.
 ///
-/// Ограничение, диктующее модель: command.sock живёт в глобальном basePath
-/// (`Libbox.setup` — один на процесс) → два CommandServer одновременно
-/// невозможны. Поэтому:
-///  - probe стартует ТОЛЬКО при выключенном VPN (гейт по
-///    `BoxService.commandClient == null`);
-///  - старт VPN всегда приоритетнее: `BoxService` зовёт [stop] перед своим
-///    `startCommandServer()` (закрывает забытую/висящую сессию).
+/// Каждая probe-сессия владеет своим TCP command endpoint, runtime-каталогом
+/// и secret. Одновременно живы не более двух; VPN всегда имеет приоритет.
+/// Обычный scanner остаётся последовательным, потому что закрывает свой run
+/// перед следующим `probeStart`.
 ///
 /// НЕ Android-сервис: VpnStatus-broadcast, уведомления и tun не затрагиваются.
 /// Все колбэки из Go — no-throw (JNI: unchecked exception = Runtime::Abort).
@@ -49,6 +49,8 @@ object ProbeSession : CommandServerHandler {
         val runId: Long,
         val server: CommandServer,
         val client: CommandClient,
+        val scope: CoroutineScope,
+        val runtimeDirectory: File,
     ) {
         @Volatile var cancelled = false
         private val clientClosed = AtomicBoolean(false)
@@ -60,11 +62,12 @@ object ProbeSession : CommandServerHandler {
         }
     }
 
-    private val session = AtomicReference<Session?>(null)
+    private val sessions = ProbeSessionRegistry<Session>()
     private val nextRunId = AtomicLong(0)
+    private val secureRandom = SecureRandom()
 
-    /// §669 — ответ на вызов с устаревшим/чужим runId: прогон вытеснен новым,
-    /// вызов ничего не делает. Dart сверяет строку дословно (`kProbeStaleRun`).
+    /// §669 — ответ на вызов с устаревшим/чужим runId: вызов ничего не делает.
+    /// Dart сверяет строку дословно (`kProbeStaleRun`).
     const val STALE_RUN = "stale run"
 
     /// §669 — потолок закрытия сервера probe-сессии, как у остановки
@@ -72,70 +75,91 @@ object ProbeSession : CommandServerHandler {
     /// WG-узлы конфига (10–17 с на устройстве).
     private const val CLOSE_TIMEOUT_MS = 3_000L
 
-    /// §237-fix — `LocalResolver` отвечает SERVFAIL, пока
-    /// `DefaultNetworkMonitor.defaultNetwork == null`, а монитор поднимает
-    /// только боевой VPN-flow. Probe-сессия стартует его сама (и гасит только
-    /// свой — если к моменту stop VPN уже жив, монитор принадлежит ему).
-    private var probeScope: CoroutineScope? = null
-    private var monitorOwned = false
+    val active: Boolean get() = sessions.size != 0
 
-    val active: Boolean get() = session.get() != null
-
-    /// Запуск сессии с готовым probe-конфигом (без inbound'ов). Возвращает
-    /// `{error, runId}`: error '' при успехе, иначе текст ошибки (runId 0).
-    /// Повторный вызов поверх живой сессии — рестарт: старая закрывается, её
-    /// владелец дальше получает [STALE_RUN].
+    /// Запуск независимой сессии с готовым probe-конфигом (без inbound'ов).
+    /// Третья попытка при двух живых сессиях возвращает ошибку и не вытесняет их.
     @Synchronized
     fun start(config: String): Map<String, Any> {
         // §732 — гейт по статусу службы, а не только по commandClient: тот
-        // появляется лишь на Started, а всё время Starting (секунды, пока ядро
-        // поднимает узлы) был null. Проба, стартовавшая в это окно, заново
-        // создавала command.sock (сокет VPN-сервера терял имя → его клиенты
-        // не подключались) и переписывала сетевой монитор службы на свой scope.
-        if (BoxService.commandClient != null || BoxVpnService.currentStatus != VpnStatus.Stopped) {
+        // появляется лишь на Started, а всё время Starting был null.
+        if (probeMayStart(BoxService.commandClient != null, BoxVpnService.currentStatus)) {
             return startResult("VPN is running — test uses the live tunnel instead")
         }
-        stopInternal("restart")
+        if (sessions.size >= 2) return startResult("probe session capacity reached")
+        val id = nextRunId.incrementAndGet()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val runtimeDirectory = File(
+            BoxApplication.application.filesDir,
+            "probes/${java.util.UUID.randomUUID()}",
+        )
         var cs: CommandServer? = null
         var cl: CommandClient? = null
+        var monitorStarted = false
         return runCatching {
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-            probeScope = scope
+            if (!runtimeDirectory.mkdirs() && !runtimeDirectory.isDirectory) {
+                error("cannot create probe runtime directory")
+            }
+            val secret = commandSecret()
+            val options = CommandServerOptions().apply {
+                commandServerListenPort = 0
+                commandServerUseTCP = true
+                commandServerSecret = secret
+                basePath = runtimeDirectory.absolutePath
+                workingPath = runtimeDirectory.absolutePath
+                tempPath = File(runtimeDirectory, "temp").absolutePath
+            }
             // Без монитора local-DNS (§049 F26) мертв → каждый lookup из
             // probe-конфига падал SERVFAIL (device-репро 04.07.2026).
-            runBlocking { DefaultNetworkMonitor.start(scope) { } }
-            monitorOwned = true
-            val server = CommandServer(this, ProbePlatform)
+            runBlocking { DefaultNetworkMonitor.start(id, scope) { } }
+            monitorStarted = true
+            val handler = object : CommandServerHandler by this@ProbeSession {
+                override fun serviceStop() {
+                    Thread { runCatching { stop(id) } }.start()
+                }
+            }
+            val server = Libbox.newCommandServerWithOptions(handler, ProbePlatform, options)
             cs = server
             server.start()
-            // §703 — cache.db может держать зависший в закрытии VPN-Box (§668
-            // отпустил остановку по потолку): удалить файл и повторить один раз.
-            CacheDbLockRetry.startOrRetry("probe") {
+            val port = server.listenPort()
+            if (port == 0) error("probe command server did not select a TCP port")
+            CacheDbLockRetry.startOrRetry("probe-$id", File(runtimeDirectory, "cache.db")) {
                 server.startOrReloadService(config, OverrideOptions())
             }
-            val client = CommandClient(ProbeClientHandler, CommandClientOptions())
+            val client = CommandClient(
+                ProbeClientHandler,
+                CommandClientOptions().apply {
+                    commandServerListenPort = port
+                    commandServerUseTCP = true
+                    commandServerSecret = secret
+                },
+            )
             cl = client
             client.connect()
-            val id = nextRunId.incrementAndGet()
-            session.set(Session(id, server, client))
+            val created = Session(id, server, client, scope, runtimeDirectory)
+            check(sessions.add(id, created)) { "probe session capacity reached" }
             Log.d(TAG, "probe session started (run=$id)")
             startResult("", id)
         }.getOrElse {
             Log.e(TAG, "probe start failed", it)
             cl?.let { c -> runCatching { c.disconnect() } }
-            cs?.let { s -> closeServerBounded(s, "start failed") }
-            stopInternal("start failed")
+            if (monitorStarted) runCatching { runBlocking { DefaultNetworkMonitor.stop(id) } }
+            cs?.let { s -> closeServerBounded(s, "start failed", runtimeDirectory) }
+            scope.cancel()
+            if (cs == null) runtimeDirectory.deleteRecursively()
             startResult(it.message ?: "probe start failed")
         }
     }
+
+    private fun commandSecret(): String = ByteArray(32).also { secureRandom.nextBytes(it) }
+        .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
     private fun startResult(error: String, runId: Long = 0): Map<String, Any> =
         mapOf("error" to error, "runId" to runId)
 
     /// Сессия прогона [runId] либо `null` и причина отказа.
     private fun sessionFor(runId: Long): Pair<Session?, String> {
-        val s = session.get() ?: return null to "probe session not running"
-        if (s.runId != runId) return null to STALE_RUN
+        val s = sessions.get(runId) ?: return null to STALE_RUN
         if (s.cancelled) return null to "probe run cancelled"
         return s to ""
     }
@@ -160,8 +184,7 @@ object ProbeSession : CommandServerHandler {
     /// до [stop] своего владельца. Не synchronized: монитор может держать
     /// долгий [start]/[stop], отмена его ждать не должна.
     fun cancel(runId: Long) {
-        val s = session.get() ?: return
-        if (s.runId != runId) return
+        val s = sessions.get(runId) ?: return
         s.cancelled = true
         s.disconnectClient()
         Log.d(TAG, "probe run $runId cancelled")
@@ -202,57 +225,42 @@ object ProbeSession : CommandServerHandler {
         }
     }
 
-    /// §669 — остановка своей сессии: чужой/устаревший [runId] — no-op
-    /// (старый прогон не закрывает сессию нового).
-    @Synchronized
+    /// §669 — остановка своей сессии: чужой/устаревший [runId] — no-op.
     fun stop(runId: Long) {
-        val s = session.get()
-        if (s != null && s.runId != runId) {
-            Log.d(TAG, "probe stop ignored: run=$runId is stale (live=${s.runId})")
-            return
-        }
-        stopInternal("run=$runId")
+        val s = sessions.get(runId) ?: return
+        if (sessions.remove(runId, s)) releaseSession(s, "run=$runId")
     }
 
-    /// Принудительная остановка любой сессии: старт VPN (`BoxService`),
-    /// просьба ядра ([serviceStop]).
-    @Synchronized
-    fun stop() = stopInternal("forced")
+    /// Принудительная остановка всех сессий: старт VPN ([BoxService]).
+    fun stop() = stopAll()
 
-    private fun stopInternal(reason: String) {
-        session.getAndSet(null)?.let {
-            it.disconnectClient()
-            closeServerBounded(it.server, reason)
-        }
-        if (monitorOwned) {
-            monitorOwned = false
-            // VPN мог уже перехватить монитор (start VPN глушит probe и
-            // стартует монитор сам) — гасим только пока службы нет.
-            // §732 — по статусу службы, не только по `commandClient`: тот
-            // null всё время Starting, когда служба уже подняла монитор
-            // на свой scope. Остановка пробы в это окно гасила бы монитор
-            // службы: туннель стартовал бы, но смены сети (Wi-Fi ↔
-            // мобильная) до перезапуска VPN не видел. Страховка ко второму
-            // гейту в [start]: с ним проба в Starting не рождается.
-            if (probeMayStopMonitor(BoxService.commandClient != null, BoxVpnService.currentStatus)) {
-                runCatching { runBlocking { DefaultNetworkMonitor.stop() } }
-            }
-        }
-        probeScope?.cancel()
-        probeScope = null
+    @Synchronized
+    fun stopAll() {
+        sessions.drain().forEach { releaseSession(it, "forced") }
+    }
+
+    private fun releaseSession(session: Session, reason: String) {
+        session.disconnectClient()
+        runCatching { runBlocking { DefaultNetworkMonitor.stop(session.runId) } }
+        closeServerBounded(session.server, reason, session.runtimeDirectory)
+        session.scope.cancel()
     }
 
     /// §669 — закрытие сервера под потолком [CLOSE_TIMEOUT_MS] (образец —
     /// шаги `StopTrace` §668). Блокирующий JNI-вызов потолок не прерывает:
     /// зависший `closeService` остаётся в своём потоке-демоне, а сессия уже
     /// снята — монитор не держит `start`/`stop` и `BoxService.startCommandServer`.
-    /// Порядок `close()` → `closeService()` — как §330: command.sock
-    /// освобождается сразу, даже если разбор WG-узлов висит.
-    private fun closeServerBounded(cs: CommandServer, reason: String) {
+    /// Runtime-каталог удаляется только после фактического завершения закрытия.
+    private fun closeServerBounded(
+        cs: CommandServer,
+        reason: String,
+        runtimeDirectory: File,
+    ) {
         val done = CountDownLatch(1)
         Thread({
             runCatching { cs.close() }
             runCatching { cs.closeService() }
+            runCatching { runtimeDirectory.deleteRecursively() }
             done.countDown()
         }, "lxbox-probe-close").apply { isDaemon = true }.start()
         if (done.await(CLOSE_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
@@ -266,12 +274,9 @@ object ProbeSession : CommandServerHandler {
 
     override fun serviceReload() {}
 
-    /// Ядро может попросить остановиться. НЕ synchronized-путь напрямую:
-    /// колбэк приходит из Go-потока, а монитор может держать start() —
-    /// разносим на отдельный поток, чтобы не словить deadlock через JNI.
-    override fun serviceStop() {
-        Thread { runCatching { stop() } }.start()
-    }
+    /// Каждый server получает handler с собственным runId; общий callback
+    /// не может остановить чужую сессию.
+    override fun serviceStop() {}
 
     override fun getSystemProxyStatus(): SystemProxyStatus = SystemProxyStatus()
     override fun setSystemProxyEnabled(isEnabled: Boolean) {}
@@ -316,9 +321,5 @@ object ProbeSession : CommandServerHandler {
     }
 }
 
-/// §732 — монитор сети общий (синглтон) у пробы и VPN-службы. Проба гасит
-/// его, только когда службы нет вовсе: любой статус, кроме Stopped, значит,
-/// что монитор уже принадлежит службе (или будет остановлен ею самой в
-/// `doStop`). Вне объекта — чтобы JVM-тест не грузил libbox-интерфейсы.
-internal fun probeMayStopMonitor(vpnClientAlive: Boolean, vpnStatus: VpnStatus): Boolean =
+internal fun probeMayStart(vpnClientAlive: Boolean, vpnStatus: VpnStatus): Boolean =
     !vpnClientAlive && vpnStatus == VpnStatus.Stopped
