@@ -56,7 +56,7 @@ separate without weakening the existing batch limits.
       indexes, per-genome attempt order and complete cleanup.
 - [x] Settings JSON round-trip is covered; RU/ZH strings pass guards.
 - [x] A dedicated UI switch widget test is present.
-- [ ] Patched AAR builds reproducibly in GitHub Actions and is consumed by Android
+- [x] Patched AAR builds reproducibly in GitHub Actions and is consumed by Android
       CI instead of the unpatched release artifact.
 - [x] Analyzer, focused tests, evolution suite, strict guards and the changed-line
       language sweep pass.
@@ -74,10 +74,13 @@ separate without weakening the existing batch limits.
 - Patched arm64 AAR builds locally and passes the core tests. The local NDK is
   newer than the core-pinned NDK and emits a reproducibility warning; CI installs
   the exact pinned NDK.
+- GitHub Actions run `45728984558` completes the Android job successfully. It
+  builds `libbox.aar` from core `f1bac271853eaf13398ce1030c948aebc3aed2e1` with
+  patch `0d6ab30b0b4ce9eed54575910423f3005f1da09ed681fbc36d194a1c60c9877a`,
+  then builds and uploads the 46.8 MB release APK.
 - Changed-line sweep: 1,695 added/untracked lines in 26 files, 0 mixed-script or
   CJK findings. Repository-wide baseline scan: 5,446 text files, 211 raw matches
   in pre-existing text (including JSON `\n` false positives); no unrelated cleanup
   is included here.
 
-Still unverified: real two-session Android runtime behavior and the patched-AAR
-GitHub Actions build.
+Still unverified: real two-session Android runtime behavior on a physical device.
