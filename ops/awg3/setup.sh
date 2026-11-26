@@ -59,13 +59,19 @@ client=${client//__HEADER_PROTECTION_KEY__/$header_key}
 interface=$(printf '%s\n' "$client" | awk '
   /^\[Interface\]$/ { inside = 1; next }
   /^\[Peer\]$/ { inside = 0 }
-  inside && $0 !~ /^(PrivateKey|Address)[[:space:]]*=/ { print }
+  inside && $0 !~ /^(PrivateKey|Address)[[:space:]]*=/ {
+    sub(/=[[:space:]]*true[[:space:]]*$/, "= on")
+    sub(/=[[:space:]]*false[[:space:]]*$/, "= off")
+    print
+  }
 ')
 server=$(printf '%s\n' "$interface"
   printf '[Peer]\nPublicKey = %s\nPreSharedKey = %s\nAllowedIPs = 10.8.3.2/32\n' \
     "$client_public" "$pre_shared")
 server=$(printf '[Interface]\nPrivateKey = %s\nAddress = 10.8.3.1/24\nListenPort = 51820\n%s\n' \
   "$server_private" "$server")
+printf '%s\n' "$server" | awg strip >/dev/null ||
+  fail 'generated server config is rejected by pinned awg-tools'
 
 client_tmp=$(mktemp "$RUNTIME/.client.conf.XXXXXX")
 server_tmp=$(mktemp "$RUNTIME/.server.conf.XXXXXX")

@@ -118,6 +118,11 @@ void main() {
         RegExp(r'^\[Interface\]$', multiLine: true).allMatches(serverSource),
         hasLength(1),
       );
+      expect(
+        RegExp(r'=\s*(true|false)\s*$', multiLine: true).hasMatch(serverSource),
+        isFalse,
+        reason: 'awg-tools accepts on/off or 0/1, not JSON booleans',
+      );
       final log = _StandLog(secrets);
       Process? singbox;
       var singboxStreams = <Future<void>>[];

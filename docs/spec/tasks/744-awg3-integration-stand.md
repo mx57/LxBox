@@ -48,7 +48,7 @@ node.
 - [x] The full AWG3 fixture survives the normal emitter without field loss.
 - [x] The integration test is tagged and skips without the explicit opt-in.
 - [ ] With the stand running, handshake and HTTP echo assertions pass.
-- [ ] Manual/nightly workflow uploads the stand log artifact.
+- [x] Manual/nightly workflow uploads the stand log artifact.
 - [x] Local setup and coverage documentation is present.
 - [x] `flutter analyze --no-pub` is clean and the default suite adds no failures
       beyond the clean-`main` Windows baseline.

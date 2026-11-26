@@ -689,3 +689,235 @@ index 77cbbfa..ff35d9b 100644
  	content, err := os.ReadFile(snapshotPath)
  	if err != nil {
  		return
+diff --git a/experimental/libbox/internal/oomprofile/linkname.go b/experimental/libbox/internal/oomprofile/linkname.go
+index f7ab271..9c0fb8d 100644
+--- a/experimental/libbox/internal/oomprofile/linkname.go
++++ b/experimental/libbox/internal/oomprofile/linkname.go
+@@ -38,9 +38,3 @@ func runtimeFrameSymbolName(f *runtime.Frame) string
+ 
+ //go:linkname runtimeExpandFinalInlineFrame runtime/pprof.runtime_expandFinalInlineFrame
+ func runtimeExpandFinalInlineFrame(stk []uintptr) []uintptr
+-
+-//go:linkname stdParseProcSelfMaps runtime/pprof.parseProcSelfMaps
+-func stdParseProcSelfMaps(data []byte, addMapping func(lo uint64, hi uint64, offset uint64, file string, buildID string))
+-
+-//go:linkname stdELFBuildID runtime/pprof.elfBuildID
+-func stdELFBuildID(file string) (string, error)
+diff --git a/experimental/libbox/internal/oomprofile/mapping_linux.go b/experimental/libbox/internal/oomprofile/mapping_linux.go
+index ddb2eaa..caf2a67 100644
+--- a/experimental/libbox/internal/oomprofile/mapping_linux.go
++++ b/experimental/libbox/internal/oomprofile/mapping_linux.go
+@@ -2,14 +2,160 @@
+ 
+ package oomprofile
+ 
+-import "os"
++import (
++	"bytes"
++	"encoding/binary"
++	"errors"
++	"fmt"
++	"os"
++	"strconv"
++	"strings"
++)
++
++// Derived from Go runtime/pprof (BSD-3-Clause), Copyright 2016, 2017 The Go Authors.
++var (
++	errBadELF    = errors.New("malformed ELF binary")
++	errNoBuildID = errors.New("no NT_GNU_BUILD_ID found in ELF binary")
++)
+ 
+ func (b *profileBuilder) readMapping() {
+ 	data, _ := os.ReadFile("/proc/self/maps")
+-	stdParseProcSelfMaps(data, func(lo, hi, offset uint64, file, buildID string) {
++	parseProcSelfMaps(data, func(lo, hi, offset uint64, file, buildID string) {
+ 		b.addMappingEntry(lo, hi, offset, file, buildID, false)
+ 	})
+ 	if len(b.mem) == 0 {
+ 		b.addMappingEntry(0, 0, 0, "", "", true)
+ 	}
+ }
++
++func parseProcSelfMaps(data []byte, addMapping func(lo, hi, offset uint64, file, buildID string)) {
++	var line []byte
++	next := func() []byte {
++		var field []byte
++		field, line, _ = bytes.Cut(line, []byte(" "))
++		line = bytes.TrimLeft(line, " ")
++		return field
++	}
++
++	for len(data) > 0 {
++		line, data, _ = bytes.Cut(data, []byte("\n"))
++		loText, hiText, ok := strings.Cut(string(next()), "-")
++		if !ok {
++			continue
++		}
++		lo, err := strconv.ParseUint(loText, 16, 64)
++		if err != nil {
++			continue
++		}
++		hi, err := strconv.ParseUint(hiText, 16, 64)
++		if err != nil {
++			continue
++		}
++		permissions := next()
++		if len(permissions) < 4 || permissions[2] != 'x' {
++			continue
++		}
++		offset, err := strconv.ParseUint(string(next()), 16, 64)
++		if err != nil {
++			continue
++		}
++		next()
++		inode := next()
++		if line == nil {
++			continue
++		}
++		file := string(line)
++		file = strings.TrimSuffix(file, " (deleted)")
++		if len(inode) == 1 && inode[0] == '0' && file == "" {
++			continue
++		}
++		buildID, _ := elfBuildID(file)
++		addMapping(lo, hi, offset, file, buildID)
++	}
++}
++
++func elfBuildID(file string) (string, error) {
++	buf := make([]byte, 256)
++	f, err := os.Open(file)
++	if err != nil {
++		return "", err
++	}
++	defer f.Close()
++
++	if _, err := f.ReadAt(buf[:64], 0); err != nil {
++		return "", err
++	}
++	if buf[0] != 0x7F || buf[1] != 'E' || buf[2] != 'L' || buf[3] != 'F' {
++		return "", errBadELF
++	}
++
++	var byteOrder binary.ByteOrder
++	switch buf[5] {
++	case 1:
++		byteOrder = binary.LittleEndian
++	case 2:
++		byteOrder = binary.BigEndian
++	default:
++		return "", errBadELF
++	}
++
++	var sectionCount int
++	var sectionOffset, sectionEntrySize int64
++	switch buf[4] {
++	case 1:
++		sectionOffset = int64(byteOrder.Uint32(buf[32:]))
++		sectionEntrySize = int64(byteOrder.Uint16(buf[46:]))
++		if sectionEntrySize != 40 {
++			return "", errBadELF
++		}
++		sectionCount = int(byteOrder.Uint16(buf[48:]))
++	case 2:
++		sectionOffset = int64(byteOrder.Uint64(buf[40:]))
++		sectionEntrySize = int64(byteOrder.Uint16(buf[58:]))
++		if sectionEntrySize != 64 {
++			return "", errBadELF
++		}
++		sectionCount = int(byteOrder.Uint16(buf[60:]))
++	default:
++		return "", errBadELF
++	}
++
++	for i := 0; i < sectionCount; i++ {
++		if _, err := f.ReadAt(buf[:sectionEntrySize], sectionOffset+int64(i)*sectionEntrySize); err != nil {
++			return "", err
++		}
++		if byteOrder.Uint32(buf[4:]) != 7 {
++			continue
++		}
++		var offset, size int64
++		if sectionEntrySize == 40 {
++			offset = int64(byteOrder.Uint32(buf[16:]))
++			size = int64(byteOrder.Uint32(buf[20:]))
++		} else {
++			offset = int64(byteOrder.Uint64(buf[24:]))
++			size = int64(byteOrder.Uint64(buf[32:]))
++		}
++		size += offset
++		for offset < size {
++			if _, err := f.ReadAt(buf[:16], offset); err != nil {
++				return "", err
++			}
++			nameSize := int(byteOrder.Uint32(buf[0:]))
++			descriptorSize := int(byteOrder.Uint32(buf[4:]))
++			noteType := int(byteOrder.Uint32(buf[8:]))
++			descriptorOffset := offset + int64((12+(nameSize+3))&^3)
++			offset = descriptorOffset + int64((descriptorSize+3)&^3)
++			if nameSize != 4 || noteType != 3 || string(buf[12:16]) != "GNU\x00" {
++				continue
++			}
++			if descriptorSize > len(buf) {
++				return "", errBadELF
++			}
++			if _, err := f.ReadAt(buf[:descriptorSize], descriptorOffset); err != nil {
++				return "", err
++			}
++			return fmt.Sprintf("%x", buf[:descriptorSize]), nil
++		}
++	}
++	return "", errNoBuildID
++}
+diff --git a/experimental/libbox/internal/oomprofile/mapping_linux_test.go b/experimental/libbox/internal/oomprofile/mapping_linux_test.go
+new file mode 100644
+index 0000000..54efdb0
+--- /dev/null
++++ b/experimental/libbox/internal/oomprofile/mapping_linux_test.go
+@@ -0,0 +1,45 @@
++package oomprofile
++
++import (
++	"os"
++	"testing"
++)
++
++func TestParseProcSelfMaps(t *testing.T) {
++	input := []byte("malformed\n" +
++		"00400000-0040b000 rw-p 00000000 fc:01 1 /not-executable\n" +
++		"0060a000-0060b000 r-xp 0000a000 fc:01 2 /tmp/example (deleted)\n" +
++		"014ab000-014cc000 rw-p 00000000 00:00 0\n")
++	type mapping struct {
++		lo, hi, offset uint64
++		file           string
++	}
++	var mappings []mapping
++	parseProcSelfMaps(input, func(lo, hi, offset uint64, file, buildID string) {
++		if buildID != "" {
++			t.Fatalf("unexpected build ID for missing file: %q", buildID)
++		}
++		mappings = append(mappings, mapping{lo, hi, offset, file})
++	})
++	if len(mappings) != 1 {
++		t.Fatalf("got %d mappings, want 1: %#v", len(mappings), mappings)
++	}
++	got := mappings[0]
++	if got.lo != 0x60a000 || got.hi != 0x60b000 || got.offset != 0xa000 || got.file != "/tmp/example" {
++		t.Fatalf("unexpected mapping: %#v", got)
++	}
++}
++
++func TestELFBuildID(t *testing.T) {
++	executable, err := os.Executable()
++	if err != nil {
++		t.Fatal(err)
++	}
++	buildID, err := elfBuildID(executable)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if buildID == "" {
++		t.Fatal("empty GNU build ID")
++	}
++}

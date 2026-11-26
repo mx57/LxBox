@@ -50,11 +50,12 @@ separate without weakening the existing batch limits.
 
 - [x] Core tests prove per-instance endpoint/secret/path behavior and preserve the
       process-global default.
-- [ ] Native tests cover capacity, independent routing, stale stop, cancellation,
+- [x] Native tests cover capacity, independent routing, stale stop, cancellation,
       forced stop and multi-listener network updates.
 - [x] Dart tests cover default-off serial behavior, two-way overlap, original
       indexes, per-genome attempt order and complete cleanup.
-- [ ] Settings JSON round-trip and UI switch are covered; RU/ZH strings pass guards.
+- [x] Settings JSON round-trip is covered; RU/ZH strings pass guards.
+- [x] A dedicated UI switch widget test is present.
 - [ ] Patched AAR builds reproducibly in GitHub Actions and is consumed by Android
       CI instead of the unpatched release artifact.
 - [x] Analyzer, focused tests, evolution suite, strict guards and the changed-line
@@ -78,5 +79,5 @@ separate without weakening the existing batch limits.
   in pre-existing text (including JSON `\n` false positives); no unrelated cleanup
   is included here.
 
-Still unverified: real two-session Android runtime behavior, a dedicated UI widget
-test, and the patched-AAR GitHub Actions build.
+Still unverified: real two-session Android runtime behavior and the patched-AAR
+GitHub Actions build.
