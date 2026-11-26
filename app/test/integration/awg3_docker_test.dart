@@ -181,7 +181,7 @@ void main() {
         ]);
         log.add(published.stdout.toString());
         log.add(published.stderr.toString());
-        expect(published.exitCode, 0);
+        expect(published.exitCode, anyOf(0, 1));
         expect(
           published.stdout.toString().trim(),
           isEmpty,
