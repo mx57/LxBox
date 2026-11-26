@@ -70,8 +70,11 @@ server=$(printf '%s\n' "$interface"
     "$client_public" "$pre_shared")
 server=$(printf '[Interface]\nPrivateKey = %s\nAddress = 10.8.3.1/24\nListenPort = 51820\n%s\n' \
   "$server_private" "$server")
-printf '%s\n' "$server" | awg strip >/dev/null ||
-  fail 'generated server config is rejected by pinned awg-tools'
+printf '%s\n' "$server" | awk '
+  /^\[Interface\]$/ { interface = 1 }
+  /^[[:space:]]*[^#;][^=]*=[[:space:]]*(true|false)[[:space:]]*$/ { invalid = 1 }
+  END { exit !(interface && !invalid) }
+' || fail 'generated server config has JSON booleans or no [Interface] header'
 
 client_tmp=$(mktemp "$RUNTIME/.client.conf.XXXXXX")
 server_tmp=$(mktemp "$RUNTIME/.server.conf.XXXXXX")
