@@ -32,7 +32,7 @@ const _safeAwgFields = <String, Object>{
   'h4': '400000-410000',
   'i1': '<b 0x01020304><r 16>',
   'i2': '<r 24>',
-  'i3': '<c>',
+  'i3': '<rc 32>',
   'i4': '<t>',
   'i5': '<b 0xaabb>',
   'content_padding_addition': '8-24',

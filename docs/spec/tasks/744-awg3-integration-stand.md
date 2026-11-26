@@ -67,6 +67,8 @@ node.
   published, on loopback; echo shares the container network namespace, waits for
   the tunnel address to become healthy and has no published port. Startup strips
   `Address`/`MTU`/`DNS` before `awg setconf` and applies address and MTU with `ip`.
+- The live fixture uses `<rc 32>` for I3. The pinned userspace core has no `<c>`
+  builder; `<c>` is a Linux kernel-module CPS tag and is not exercised here.
 - The log redactor works on complete lines and has a regression test for a key
   split across process-output chunks.
 
