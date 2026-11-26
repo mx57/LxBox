@@ -34,6 +34,7 @@ accepted only after its release `SHA256SUMS` entry matches.
 Generated files live only in `app/build/awg3-stand/`:
 
 - `client.conf` and `server.conf`: private runtime configuration.
+- `client.pub`: generated client public key used by the handshake assertion.
 - `sing-box`: verified pinned client core.
 - `client.sing-box.json`: configuration built by the test from the emitted node.
 - `stand.log`: line-buffered log with generated keys redacted.

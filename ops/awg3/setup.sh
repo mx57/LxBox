@@ -93,6 +93,7 @@ printf '%s\n' "$server" > "$server_tmp"
 chmod 0644 "$server_tmp"
 mv -f -- "$client_tmp" "$RUNTIME/client.conf"
 mv -f -- "$server_tmp" "$RUNTIME/server.conf"
+printf '%s\n' "$client_public" > "$RUNTIME/client.pub"
 
 core_version=$(tr -d '[:space:]' < "$ROOT/app/android/libbox.version")
 core_name=${core_version#v}

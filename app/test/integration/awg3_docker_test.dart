@@ -102,8 +102,15 @@ void main() {
     () async {
       final client = File('${_runtime.path}/client.conf');
       final server = File('${_runtime.path}/server.conf');
+      final clientPublicFile = File('${_runtime.path}/client.pub');
       final core = File('${_runtime.path}/sing-box');
-      for (final file in [client, server, core, File(_compose)]) {
+      for (final file in [
+        client,
+        server,
+        clientPublicFile,
+        core,
+        File(_compose),
+      ]) {
         expect(
           file.existsSync(),
           isTrue,
@@ -196,7 +203,8 @@ void main() {
           singbox.stderr.transform(utf8.decoder).forEach(log.add),
         ];
 
-        final clientPublic = _iniValue(client.readAsStringSync(), 'PublicKey');
+        final clientPublic = clientPublicFile.readAsStringSync().trim();
+        expect(clientPublic, isNotEmpty);
         await _waitForHandshake(
           _compose,
           clientPublic,
